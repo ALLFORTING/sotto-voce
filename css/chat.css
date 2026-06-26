@@ -237,6 +237,17 @@
   opacity: 0.7;
 }
 
+.thought-clock {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+
+.thought-clock svg {
+  width: 12px;
+  height: 12px;
+}
+
 .thought-expanded {
   margin: 0 0 8px 4px;
   padding: 4px 0 8px 8px;
@@ -248,23 +259,10 @@
 }
 
 .thought-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
   padding-left: 8px;
   font-size: 12.5px;
   line-height: 1.55;
-}
-
-.thought-step .text {
-  flex: 1;
   text-wrap: pretty;
-}
-
-.thought-step svg {
-  width: 12px;
-  height: 12px;
-  margin-top: 3px;
 }
 
 .thought-step.done {

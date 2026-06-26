@@ -13,12 +13,12 @@ function aiBubblesHtml(message) {
   return parts.map((part) => `<div class="msg-bubble">${plainText(part)}</div>`).join("");
 }
 
-function thoughtStepsHtml(text) {
+function thoughtContentHtml(text) {
   return String(text || "")
     .split(/\n+/)
     .map((part) => part.trim())
     .filter(Boolean)
-    .map((part) => `<div class="thought-step">${icon("clock")}<span class="text">${esc(part)}</span></div>`)
+    .map((part) => `<div class="thought-step">${esc(part)}</div>`)
     .join("");
 }
 
@@ -30,8 +30,8 @@ function thoughtHtml(message) {
     ? "Thinking..."
     : `Thought for ${Number(message.thinking_seconds || 0).toFixed(1)}s`;
   return `<div class="thought">
-    <button data-action="toggle-thought" ${text ? "" : "disabled"}><span class="chev">${icon(open ? "chevD" : "chevR")}</span><span>${label}</span></button>
-  </div>${open && text ? `<div class="thought-expanded">${thoughtStepsHtml(text)}</div>` : ""}`;
+    <button data-action="toggle-thought" ${text ? "" : "disabled"}><span class="chev">${icon(open ? "chevD" : "chevR")}</span><span class="thought-clock">${icon("clock")}</span><span>${label}</span></button>
+  </div>${open && text ? `<div class="thought-expanded">${thoughtContentHtml(text)}</div>` : ""}`;
 }
 
 function toolsHtml(message) {

@@ -330,14 +330,12 @@ async function sendMessage(content, attachments = [], options = {}) {
     frame: 0,
     started: false,
     sawThinking: false,
-    thinkingEnded: false,
-    collapseThought: false
+    thinkingEnded: false
   };
   const finalize = async () => {
     if (
       pending.text ||
       pending.thinking ||
-      pending.collapseThought ||
       (pending.sawThinking && !pending.thinkingEnded) ||
       !pending.done
     ) return;
@@ -357,12 +355,7 @@ async function sendMessage(content, attachments = [], options = {}) {
       pending.thinking = pending.thinking.slice(take);
       updateStreamMeta(assistant);
     }
-    if (!pending.thinking && pending.collapseThought) {
-      pending.collapseThought = false;
-      assistant.thinkingOpen = false;
-      updateStreamMeta(assistant);
-    }
-    const canRenderText = !pending.sawThinking || (pending.thinkingEnded && !pending.thinking && !pending.collapseThought);
+    const canRenderText = !pending.sawThinking || (pending.thinkingEnded && !pending.thinking);
     if (pending.text && canRenderText) {
       const take = Math.max(1, Math.ceil(pending.text.length / 90));
       let text = pending.text.slice(0, take);
@@ -375,7 +368,7 @@ async function sendMessage(content, attachments = [], options = {}) {
       appendStreamText(assistant, text);
     }
     scrollChat();
-    if (pending.thinking || pending.collapseThought || (pending.text && canRenderText)) pending.frame = requestAnimationFrame(drain);
+    if (pending.thinking || (pending.text && canRenderText)) pending.frame = requestAnimationFrame(drain);
     else finalize().catch(console.warn);
   };
   const schedule = () => {
@@ -388,22 +381,18 @@ async function sendMessage(content, attachments = [], options = {}) {
         if (event === "thinking_start") {
           pending.sawThinking = true;
           pending.thinkingEnded = false;
-          pending.collapseThought = false;
           assistant.thinkingStarted = true;
-          assistant.thinkingOpen = true;
           updateStreamMeta(assistant);
         }
         if (event === "thinking_delta" && data.text) {
           pending.sawThinking = true;
           if (!pending.thinkingEnded) assistant.thinkingStarted = true;
-          assistant.thinkingOpen = true;
           pending.thinking += data.text;
           schedule();
         }
         if (event === "thinking_end") {
           pending.sawThinking = true;
           pending.thinkingEnded = true;
-          pending.collapseThought = true;
           assistant.thinking_seconds = Number(data.seconds || 0);
           assistant.thinkingStarted = false;
           schedule();
