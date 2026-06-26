@@ -1,0 +1,308 @@
+.seg {
+  margin: 0 24px 12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.seg-item {
+  position: relative;
+  padding: 0 0 8px;
+  color: var(--text-3);
+  font-size: 13.5px;
+  line-height: 18px;
+  letter-spacing: 0.5px;
+}
+
+.seg-item.active {
+  color: var(--text);
+}
+
+.seg-item.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.dom-filter {
+  padding: 0 24px 16px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+.dom-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-dom {
+  min-height: 26px;
+  padding: 5px 14px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+
+.chip-dom.active {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.phone.dark .chip-dom.active,
+.phone.academy .chip-dom.active,
+.phone.gothic .chip-dom.active {
+  background: var(--accent);
+  color: oklch(0.18 0.013 55);
+}
+
+.section-divider {
+  padding: 12px 24px 4px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+.mem-list-v2,
+.mem-list {
+  border-top: 1px solid var(--border-soft);
+}
+
+.mem-v2 {
+  position: relative;
+  width: 100%;
+  padding: 14px 24px 14px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+}
+
+.imp-bar {
+  position: absolute;
+  left: 24px;
+  top: 18px;
+  bottom: 18px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.imp-bar.low {
+  opacity: 0.2;
+}
+
+.imp-bar.mid {
+  opacity: 0.55;
+}
+
+.imp-bar.high {
+  opacity: 1;
+}
+
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pin {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.pin svg {
+  width: 11px;
+  height: 11px;
+}
+
+.mood-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.mood-dot.warm {
+  background: var(--mood-warm);
+}
+
+.mood-dot.cool {
+  background: var(--mood-cool);
+}
+
+.title-t {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14.5px;
+  line-height: 22px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+}
+
+.mem-v2 .meta {
+  color: var(--text-3);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
+.mem-v2.dormant,
+.mem-v2.digested,
+.mem-v2.sealed {
+  opacity: 0.5;
+}
+
+.mem-v2.dormant .imp-bar,
+.mem-v2.digested .imp-bar,
+.mem-v2.sealed .imp-bar {
+  background: var(--text-3);
+}
+
+.mood-chart {
+  margin: 4px 24px 8px;
+}
+
+.mood-chart .head {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-3);
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+}
+
+.mood-chart .stage {
+  height: 64px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+.mood-chart svg {
+  width: 520px;
+  height: 64px;
+  display: block;
+}
+
+.mood-chart .axis {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-3);
+  font-family: "Iowan Old Style", var(--font-serif);
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+}
+
+.archive-item {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.archive-date {
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.archive-date .y {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+}
+
+.archive-item .mood {
+  display: inline-flex;
+  margin-bottom: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--accent);
+  font-size: 10.5px;
+  line-height: 18px;
+  letter-spacing: 1px;
+}
+
+.archive-item .summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.3px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.archive-item.expanded .summary {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.archive-full {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.65;
+  letter-spacing: 0.25px;
+  white-space: pre-wrap;
+}
+
+.archive-hint {
+  padding: 0 24px 10px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.4px;
+}
+
+.archive-item.loading {
+  opacity: 0.72;
+}

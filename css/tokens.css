@@ -1,0 +1,156 @@
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("/fonts/CormorantGaramond-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC",
+    "Noto Sans SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-serif: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --scrim-drawer: oklch(0 0 0 / 0.32);
+  --scrim-heavy: oklch(0 0 0 / 0.40);
+  --scrim-sheet: oklch(0 0 0 / 0.35);
+  --mood-warm: oklch(0.72 0.10 60);
+  --mood-cool: oklch(0.65 0.06 240);
+  --shadow-soft: 0 8px 30px oklch(0 0 0 / 0.18);
+  --shadow-menu: 0 8px 30px oklch(0 0 0 / 0.22);
+  --dark-button-text: oklch(0.18 0.013 55);
+}
+
+.phone.light {
+  --bg: oklch(0.985 0.005 70);
+  --bg-elev: oklch(0.97 0.008 70);
+  --bg-sunken: oklch(0.96 0.008 70);
+  --bubble-user: #C4784A;
+  --bubble-ai: oklch(0.928 0.014 72);
+  --text: oklch(0.27 0.012 60);
+  --text-2: oklch(0.50 0.015 60);
+  --text-3: oklch(0.68 0.012 65);
+  --text-4: oklch(0.80 0.010 65);
+  --border: oklch(0.91 0.010 70);
+  --border-soft: oklch(0.94 0.008 70);
+  --accent: oklch(0.62 0.075 55);
+  --accent-soft: oklch(0.91 0.040 60);
+  --online: oklch(0.70 0.110 145);
+  --warn: oklch(0.70 0.130 50);
+  --danger: oklch(0.58 0.140 25);
+  --bezel: oklch(0.18 0.008 60);
+}
+
+.phone.dark {
+  --bg: oklch(0.20 0.013 55);
+  --bg-elev: oklch(0.24 0.014 55);
+  --bg-sunken: oklch(0.235 0.012 55);
+  --bubble-user: #C4784A;
+  --bubble-ai: oklch(0.285 0.016 55);
+  --text: oklch(0.94 0.010 70);
+  --text-2: oklch(0.72 0.015 65);
+  --text-3: oklch(0.55 0.013 60);
+  --text-4: oklch(0.42 0.012 58);
+  --border: oklch(0.30 0.012 55);
+  --border-soft: oklch(0.265 0.012 55);
+  --accent: oklch(0.78 0.080 60);
+  --accent-soft: oklch(0.36 0.040 55);
+  --online: oklch(0.78 0.110 145);
+  --warn: oklch(0.78 0.130 55);
+  --danger: oklch(0.70 0.140 25);
+  --bezel: oklch(0.08 0.004 60);
+}
+
+.phone.frost {
+  --bg: #FAFCFF;
+  --bg-elev: #F5F8FC;
+  --bg-sunken: #F0F4FA;
+  --bubble-user: #7E8FA8;
+  --bubble-ai: #F0F4FA;
+  --text: #2E3340;
+  --text-2: #686E7A;
+  --text-3: #9AA2B0;
+  --text-4: #C8CED8;
+  --border: #D0D8E5;
+  --border-soft: #E0E6F0;
+  --accent: #6F87A8;
+  --accent-soft: #D7DFEB;
+  --online: #6EB287;
+  --warn: oklch(0.65 0.130 50);
+  --danger: oklch(0.58 0.140 25);
+  --bezel: oklch(0.18 0.008 60);
+}
+
+.phone.pearl {
+  --bg: #FDFCFE;
+  --bg-elev: #F9F7FB;
+  --bg-sunken: #F5F3F7;
+  --bubble-user: #9A8FA8;
+  --bubble-ai: #F5F3F7;
+  --text: #3A343F;
+  --text-2: #78737E;
+  --text-3: #9B95A4;
+  --text-4: #C8C2CE;
+  --border: #DFDBE5;
+  --border-soft: #ECEAF0;
+  --accent: #9A8FA8;
+  --accent-soft: #E5DFEB;
+  --online: #6EB287;
+  --warn: oklch(0.65 0.130 50);
+  --danger: oklch(0.58 0.140 25);
+  --bezel: oklch(0.18 0.008 60);
+}
+
+.phone.academy {
+  --bg: #1A1C16;
+  --bg-elev: #2A2820;
+  --bg-sunken: #232118;
+  --bubble-user: #B89456;
+  --bubble-ai: #2A2820;
+  --text: #E0D8C8;
+  --text-2: #B5AD9A;
+  --text-3: #8A8270;
+  --text-4: #5E5848;
+  --border: #4A4538;
+  --border-soft: #3A3528;
+  --accent: #C9A961;
+  --accent-soft: #3A4A38;
+  --online: #7A9A6E;
+  --warn: oklch(0.78 0.130 55);
+  --danger: oklch(0.70 0.140 25);
+  --bezel: oklch(0.08 0.004 60);
+}
+
+.phone.gothic {
+  --bg: #17161C;
+  --bg-elev: #23222A;
+  --bg-sunken: #1C1B22;
+  --bubble-user: #8B3040;
+  --bubble-ai: #23222A;
+  --text: #E0DEE5;
+  --text-2: #B0ADB8;
+  --text-3: #7A7882;
+  --text-4: #4A4852;
+  --border: #3A3842;
+  --border-soft: #2C2A33;
+  --accent: #8B3040;
+  --accent-soft: #3A2530;
+  --online: #B0ADB8;
+  --warn: oklch(0.78 0.130 55);
+  --danger: #8B3040;
+  --bezel: oklch(0.08 0.004 60);
+}
+
+.phone.dark .primary,
+.phone.academy .primary,
+.phone.gothic .primary,
+.phone.dark .save-btn,
+.phone.academy .save-btn,
+.phone.gothic .save-btn,
+.phone.dark .chip-dom.active,
+.phone.academy .chip-dom.active,
+.phone.gothic .chip-dom.active {
+  background: var(--accent);
+  color: var(--dark-button-text);
+}
