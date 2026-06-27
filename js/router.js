@@ -28,6 +28,7 @@ import { renderHome } from "./home.js";
 import {
   appendStreamText,
   renderChat,
+  renderDrawer,
   renderLongPressMenu,
   scrollChat,
   updateAutoFollow,
@@ -460,7 +461,9 @@ document.addEventListener("pointerdown", (event) => {
       store.longPress = { role: "conversation", conversationId: Number(conversation.dataset.conversation) };
     }
     const overlay = document.querySelector(".phone-overlay-layer");
-    if (overlay) overlay.innerHTML = renderLongPressMenu();
+    if (overlay) {
+      overlay.innerHTML = (store.drawerOpen ? renderDrawer() : "") + renderLongPressMenu();
+    }
     navigator.vibrate?.(15);
   }, 500);
 });
