@@ -509,7 +509,7 @@ def request_payload(context, tools, extra_messages):
     if tools:
         body["tools"] = openai_tools(tools)
     if host.endswith("openrouter.ai"):
-        body["reasoning"] = {"enabled": True}
+        body["reasoning"] = {"max_tokens": 16000}
     if mode == "or-blocks":
         if body["messages"] and body["messages"][0].get("role") == "system":
             mark_cache_breakpoint(body["messages"][0])
