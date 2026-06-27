@@ -120,6 +120,8 @@
   flex-direction: column;
   gap: 4px;
   text-align: left;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .drawer-item.active {

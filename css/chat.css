@@ -127,6 +127,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .msg-row.user {

@@ -743,6 +743,10 @@ document.addEventListener("click", (event) => {
   form.querySelectorAll(".pick").forEach((node) => node.classList.toggle("active", node === pick));
 });
 
+document.addEventListener("contextmenu", (event) => {
+  if (event.target.closest(".msg-row, .drawer-item")) event.preventDefault();
+});
+
 async function handleMessageAction(action) {
   const target = store.messages.find((item) => item.id === store.longPress?.id);
   if (!target) return;
