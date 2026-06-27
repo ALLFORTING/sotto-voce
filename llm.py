@@ -628,6 +628,8 @@ def stream_openai(response):
         cached_tokens = details.get("cached_tokens")
         if cached_tokens is not None:
             result.cache_read_tokens = int(cached_tokens)
+        if usage and usage.get("prompt_tokens"):
+            LOGGER.debug("openai usage: %s", json.dumps(usage, default=str))
         choices = data.get("choices") or []
         if not choices:
             continue
