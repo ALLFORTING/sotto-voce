@@ -5,7 +5,8 @@ function aiBubbleTexts(value = "") {
   return String(value || "")
     .split(/\n+/)
     .map((part) => part.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((part) => !/^\[\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\]$/.test(part));
 }
 
 function aiBubblesHtml(message) {
