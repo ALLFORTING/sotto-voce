@@ -74,8 +74,8 @@ function presetForm(preset = {}) {
     <div class="field"><label class="lab">ENDPOINT</label><input name="endpoint" value="${esc(preset.endpoint || "")}" required></div>
     <div class="field"><label class="lab">API KEY</label><div class="inp pass">${showKeyInput ? `<input name="api_key" type="${visible ? "text" : "password"}" value="${esc(preset.api_key || "")}" required>` : `<input type="hidden" name="api_key" value="${esc(preset.api_key || "")}"><span class="pass-mask">${esc(maskKey(preset.api_key))}</span>`}<button class="eye" type="button" data-action="toggle-preset-key" data-key-id="${id || "new"}">${icon("eye")}</button></div></div>
     <div class="field"><label class="lab">模型</label><input name="model" value="${esc(preset.model || "")}" required></div>
-    <div class="field"><label class="lab">输入价格</label><input name="input_price" type="number" step="0.0001" min="0" value="${Number(preset.input_price || 0)}"></div>
-    <div class="field"><label class="lab">输出价格</label><input name="output_price" type="number" step="0.0001" min="0" value="${Number(preset.output_price || 0)}"></div>
+    <div class="field"><label class="lab">输入价格</label><div class="unit-input"><input name="input_price" type="number" step="0.0001" min="0" value="${Number(preset.input_price || 0)}"><span class="unit">$/MTok</span></div></div>
+    <div class="field"><label class="lab">输出价格</label><div class="unit-input"><input name="output_price" type="number" step="0.0001" min="0" value="${Number(preset.output_price || 0)}"><span class="unit">$/MTok</span></div></div>
     <div class="field"><label class="lab">请求格式</label><input type="hidden" name="format" value="${esc(format)}"><div class="seg-pick"><button type="button" class="pick ${format === "anthropic" ? "active" : ""}" data-format-pick="anthropic">Anthropic 原生</button><button type="button" class="pick ${format === "openai" ? "active" : ""}" data-format-pick="openai">OpenAI 兼容</button></div></div>
     <div class="field"><button class="primary" type="submit" data-activate="1">保存并启用</button></div>
   </form>`;

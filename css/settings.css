@@ -249,6 +249,36 @@
   height: 16px;
 }
 
+.field .unit-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.field .unit-input input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field .unit-input .unit {
+  flex-shrink: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
 .seg-pick {
   display: flex;
   gap: 8px;
@@ -272,11 +302,20 @@
   width: calc(100% - 48px);
   min-height: 48px;
   margin: 18px 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 1px dashed var(--border);
   border-radius: 14px;
   color: var(--text-2);
   font-size: 13.5px;
   letter-spacing: 0.5px;
+}
+
+.add-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .mcp-url {

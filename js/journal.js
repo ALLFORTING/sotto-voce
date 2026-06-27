@@ -172,7 +172,7 @@ export function renderReader() {
 function statCard(label, data) {
   return `<section class="ledger-card">
     <div class="lbl">${label}</div>
-    <div class="amt"><span class="cu">¥</span>${Number(data.cost || 0).toFixed(2)}</div>
+    <div class="amt"><span class="cu">$</span>${Number(data.cost || 0).toFixed(2)}</div>
     <div class="rows">
       <span>对话 ${data.rounds || 0} 轮</span>
       <span>Input ${tokenCount(data.input_tokens)} tok</span>
@@ -194,7 +194,7 @@ export function renderLedger() {
         ${(detail.logs || []).map((log) => `<div class="ledger-row">
           <div class="row-top"><span>${formatDate(log.created_at)} · <span class="iface">${esc(log.preset_name || log.model || "接口")}</span></span><span class="cost">${currency(log.cost)}</span></div>
           <div class="row-bot">↑${tokenCount(log.input_tokens)} · ↓${tokenCount(log.output_tokens)} · 缓存 ${tokenCount(log.cache_read_tokens || log.cache_read || 0)}</div>
-        </div>`).join("") || `<div class="ledger-row"><div class="row-top"><span>今天 21:42 · <span class="iface">OpenRouter</span></span><span class="cost">¥0.12</span></div><div class="row-bot">↑1240 · ↓892 · 命中 540</div></div>`}
+        </div>`).join("") || `<div class="ledger-row"><div class="row-top"><span>今天 21:42 · <span class="iface">OpenRouter</span></span><span class="cost">$0.12</span></div><div class="row-bot">↑1240 · ↓892 · 命中 540</div></div>`}
       </div>
     </section>
   </main>`;

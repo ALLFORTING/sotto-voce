@@ -184,7 +184,7 @@ export function maskKey(key = "") {
 }
 
 export function currency(value) {
-  return `¥ ${Number(value || 0).toFixed(2)}`;
+  return `$ ${Number(value || 0).toFixed(2)}`;
 }
 
 export function tokenCount(value) {
