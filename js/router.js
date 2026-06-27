@@ -494,6 +494,14 @@ document.addEventListener("click", async (event) => {
     setTheme(theme);
     return render(renderRoute(route()));
   }
+  if (store.longPress && store.drawerOpen && event.target.closest(".drawer") && !event.target.closest(".long-press-menu")) {
+    store.longPress = null;
+    const overlay = document.querySelector(".phone-overlay-layer");
+    if (overlay) {
+      overlay.querySelectorAll(".long-press-menu, .overlay-scrim").forEach((el) => el.remove());
+    }
+    return;
+  }
   const action = event.target.closest("[data-action]")?.dataset.action;
   const id = Number(event.target.closest("[data-id]")?.dataset.id || 0);
   try {
