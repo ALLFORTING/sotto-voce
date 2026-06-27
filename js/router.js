@@ -847,4 +847,11 @@ updateThemeMeta();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register(`/sw.js?v=${VERSION}`).catch(console.warn);
 }
+
+document.addEventListener("touchmove", (event) => {
+  if (!event.target.closest(".scroll, .chat-stream, .drawer-list, .es-body, .home-page")) {
+    event.preventDefault();
+  }
+}, { passive: false });
+
 navigate();
