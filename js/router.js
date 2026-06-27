@@ -462,7 +462,11 @@ document.addEventListener("pointerdown", (event) => {
     }
     const overlay = document.querySelector(".phone-overlay-layer");
     if (overlay) {
-      overlay.innerHTML = (store.drawerOpen ? renderDrawer() : "") + renderLongPressMenu();
+      if (conversation && store.drawerOpen) {
+        overlay.insertAdjacentHTML("beforeend", renderLongPressMenu());
+      } else {
+        overlay.innerHTML = renderLongPressMenu();
+      }
     }
     navigator.vibrate?.(15);
   }, 500);
@@ -507,13 +511,16 @@ document.addEventListener("click", async (event) => {
       return render(renderChat());
     }
     if (action === "close-overlay") {
-      const hadLongPress = Boolean(store.longPress);
-      const hadDrawer = store.drawerOpen;
+      if (store.longPress && store.drawerOpen) {
+        store.longPress = null;
+        const overlay = document.querySelector(".phone-overlay-layer");
+        if (overlay) overlay.innerHTML = renderDrawer();
+        return;
+      }
       store.drawerOpen = false;
       store.plusOpen = false;
       store.longPress = null;
       store.bucketEdit = null;
-      if (hadLongPress && !hadDrawer) return dismissLongPress();
       return render(renderRoute(route()));
     }
     if (action === "new-conversation") {
