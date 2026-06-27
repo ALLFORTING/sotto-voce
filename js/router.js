@@ -15,6 +15,8 @@ import {
   clearToken,
   rememberConversation,
   saveArchiveCache,
+  saveConversationsCache,
+  saveHomeCache,
   saveMemoryCache,
   setTheme,
   setToken,
@@ -80,14 +82,12 @@ function render(html) {
 
 async function loadHome(force = false) {
   if (!force && store.home && cacheFresh("home", CACHE_MS.home)) return;
-  store.home = await api.get("/api/home");
-  store.cacheAt.home = Date.now();
+  saveHomeCache(await api.get("/api/home"));
 }
 
 async function loadConversations(force = false) {
   if (!force && store.conversations.length && cacheFresh("conversations", CACHE_MS.conversations)) return;
-  store.conversations = await api.get("/api/conversations");
-  store.cacheAt.conversations = Date.now();
+  saveConversationsCache(await api.get("/api/conversations"));
   if (store.conversationId && !store.conversations.some((item) => item.id === store.conversationId)) {
     rememberConversation(store.conversations[0]?.id || null);
   }

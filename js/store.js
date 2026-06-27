@@ -18,8 +18,8 @@ export const store = {
   token: localStorage.getItem("cheng_api_token") || "",
   theme: themes.includes(savedTheme) ? savedTheme : "light",
   route: location.hash.slice(1) || "/",
-  home: null,
-  conversations: [],
+  home: readJson("cheng_home_v2", null),
+  conversations: readJson("cheng_conversations_v2", []),
   conversationId: Number(localStorage.getItem("cheng_conversation_id") || 0) || null,
   messages: [],
   messageCache: {},
@@ -47,8 +47,8 @@ export const store = {
   mcpServers: [],
   anniversaries: [],
   cacheAt: {
-    home: 0,
-    conversations: 0,
+    home: Number(localStorage.getItem("cheng_home_v2_at") || 0),
+    conversations: Number(localStorage.getItem("cheng_conversations_v2_at") || 0),
     messages: {},
     calendar: 0,
     books: 0,
@@ -114,6 +114,20 @@ export function cacheFresh(key, maxAge) {
 export function cacheMessages(conversationId, messages) {
   store.messageCache[conversationId] = messages;
   store.cacheAt.messages[conversationId] = Date.now();
+}
+
+export function saveHomeCache(data) {
+  store.home = data;
+  store.cacheAt.home = Date.now();
+  localStorage.setItem("cheng_home_v2", JSON.stringify(data));
+  localStorage.setItem("cheng_home_v2_at", String(store.cacheAt.home));
+}
+
+export function saveConversationsCache(data) {
+  store.conversations = data;
+  store.cacheAt.conversations = Date.now();
+  localStorage.setItem("cheng_conversations_v2", JSON.stringify(data));
+  localStorage.setItem("cheng_conversations_v2_at", String(store.cacheAt.conversations));
 }
 
 export function saveMemoryCache(items) {
