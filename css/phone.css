@@ -101,7 +101,7 @@ svg {
 
 .tabbar {
   height: 84px;
-  padding: 1px 14px 10px;
+  padding: 1px 14px calc(10px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   border-top: 1px solid var(--border-soft);
@@ -517,6 +517,7 @@ svg {
   #app {
     width: 100vw;
     height: 100dvh;
+    height: 100svh;
   }
 
   .phone {

@@ -28,6 +28,7 @@ import { renderHome } from "./home.js";
 import {
   appendStreamText,
   renderChat,
+  renderLongPressMenu,
   scrollChat,
   updateAutoFollow,
   updateThoughtDom,
@@ -429,6 +430,13 @@ function clearLongPress() {
   document.querySelector(".long-press-active")?.classList.remove("long-press-active");
 }
 
+function dismissLongPress() {
+  store.longPress = null;
+  document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+  const overlay = document.querySelector(".phone-overlay-layer");
+  if (overlay) overlay.innerHTML = "";
+}
+
 document.addEventListener("pointerdown", (event) => {
   const message = event.target.closest(".msg-row[data-message-id]");
   const conversation = event.target.closest(".drawer-item");
@@ -451,7 +459,8 @@ document.addEventListener("pointerdown", (event) => {
     if (conversation) {
       store.longPress = { role: "conversation", conversationId: Number(conversation.dataset.conversation) };
     }
-    render(renderRoute(route()));
+    const overlay = document.querySelector(".phone-overlay-layer");
+    if (overlay) overlay.innerHTML = renderLongPressMenu();
     navigator.vibrate?.(15);
   }, 500);
 });
@@ -495,10 +504,13 @@ document.addEventListener("click", async (event) => {
       return render(renderChat());
     }
     if (action === "close-overlay") {
+      const hadLongPress = Boolean(store.longPress);
+      const hadDrawer = store.drawerOpen;
       store.drawerOpen = false;
       store.plusOpen = false;
       store.longPress = null;
       store.bucketEdit = null;
+      if (hadLongPress && !hadDrawer) return dismissLongPress();
       return render(renderRoute(route()));
     }
     if (action === "new-conversation") {
@@ -753,11 +765,13 @@ async function handleMessageAction(action) {
   if (action === "copy") {
     await navigator.clipboard.writeText(target.content || "");
     toast("已复制");
+    return dismissLongPress();
   }
   if (action === "star") {
     await api.patch(`/api/messages/${target.id}`, { starred: !target.starred });
     target.starred = !target.starred;
     toast(target.starred ? "已星标" : "已取消星标");
+    return dismissLongPress();
   }
   if (action === "edit") {
     const content = prompt("编辑消息", target.content);
