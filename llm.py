@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import re
@@ -14,6 +15,7 @@ from mcp_client import call_tool, get_tools
 LOGGER = logging.getLogger(__name__)
 MAX_TOOL_ROUNDS = 15
 DEFAULT_CONTEXT_WINDOW = 200_000
+CACHE_USER_ID = "sotto-voce-stable"
 
 
 class ChatSetupError(Exception):
@@ -28,6 +30,8 @@ class StreamResult:
     thinking: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     tool_calls: list = field(default_factory=list)
 
 
@@ -50,6 +54,50 @@ def context_window(model):
         ("gemini-2.0", 1_048_576),
     )
     return next((size for marker, size in known if marker in name), DEFAULT_CONTEXT_WINDOW)
+
+
+def cache_mode(preset):
+    host = urlparse(preset["endpoint"]).hostname or ""
+    if host.endswith("openrouter.ai"):
+        return "or-blocks"
+    if preset["format"] == "anthropic" and (
+        host.endswith("anthropic.com") or host.endswith("msui.io")
+    ):
+        return "anthropic-bp"
+    return "oai-passthrough"
+
+
+def upstream_format(preset):
+    if cache_mode(preset) == "or-blocks":
+        return "openai"
+    return preset["format"]
+
+
+def cached_text_block(text):
+    return {
+        "type": "text",
+        "text": text,
+        "cache_control": {"type": "ephemeral"},
+    }
+
+
+def mark_cache_breakpoint(message):
+    content = message.get("content")
+    if isinstance(content, str):
+        message["content"] = [cached_text_block(content)]
+    elif isinstance(content, list) and content:
+        last = content[-1]
+        if isinstance(last, dict):
+            last["cache_control"] = {"type": "ephemeral"}
+        elif isinstance(last, str):
+            content[-1] = cached_text_block(last)
+
+
+def mark_rolling_user_breakpoint(messages):
+    for index in range(len(messages) - 2, -1, -1):
+        if messages[index].get("role") == "user":
+            mark_cache_breakpoint(messages[index])
+            break
 
 
 def endpoint_url(endpoint, suffix):
@@ -202,7 +250,8 @@ def load_regeneration_context(message_id):
 def short_completion(preset, prompt, max_tokens=100):
     headers = auth_headers(preset)
     headers["Accept"] = "application/json"
-    if preset["format"] == "anthropic":
+    format_name = upstream_format(preset)
+    if format_name == "anthropic":
         url = endpoint_url(preset["endpoint"], "/v1/messages")
         body = {
             "model": preset["model"],
@@ -222,7 +271,7 @@ def short_completion(preset, prompt, max_tokens=100):
         response = client.post(url, headers=headers, json=body)
         response.raise_for_status()
         data = response.json()
-    if preset["format"] == "anthropic":
+    if format_name == "anthropic":
         return "".join(
             block.get("text", "")
             for block in data.get("content", [])
@@ -241,6 +290,8 @@ def record_usage_log(context, result, created_at):
     preset = context["preset"]
     input_tokens = int(result.input_tokens or 0)
     output_tokens = int(result.output_tokens or 0)
+    cache_read_tokens = int(result.cache_read_tokens or 0)
+    cache_write_tokens = int(result.cache_write_tokens or 0)
     input_price = float(preset.get("input_price") or 0)
     output_price = float(preset.get("output_price") or 0)
     cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
@@ -252,7 +303,7 @@ def record_usage_log(context, result, created_at):
                 input_tokens, output_tokens,
                 cache_read_tokens, cache_write_tokens,
                 cost, created_at
-            ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 context["conversation_id"],
@@ -260,6 +311,8 @@ def record_usage_log(context, result, created_at):
                 preset.get("model"),
                 input_tokens,
                 output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
                 cost,
                 created_at,
             ),
@@ -337,13 +390,14 @@ def generate_conversation_title(context, assistant_text):
 
 def auth_headers(preset):
     host = urlparse(preset["endpoint"]).hostname or ""
+    format_name = upstream_format(preset)
     headers = {"Accept": "text/event-stream", "Content-Type": "application/json"}
-    if preset["format"] == "anthropic" and host.endswith("anthropic.com"):
+    if format_name == "anthropic" and host.endswith("anthropic.com"):
         headers["x-api-key"] = preset["api_key"]
         headers["anthropic-version"] = "2023-06-01"
     else:
         headers["Authorization"] = f"Bearer {preset['api_key']}"
-        if preset["format"] == "anthropic":
+        if format_name == "anthropic":
             headers["anthropic-version"] = "2023-06-01"
     return headers
 
@@ -422,31 +476,44 @@ def iter_sse_json(response):
 def request_payload(context, tools, extra_messages):
     preset = context["preset"]
     host = urlparse(preset["endpoint"]).hostname or ""
-    if preset["format"] == "anthropic":
+    mode = cache_mode(preset)
+    format_name = upstream_format(preset)
+    if format_name == "anthropic":
+        messages = anthropic_messages(context["history"]) + copy.deepcopy(extra_messages)
         body = {
             "model": preset["model"],
             "max_tokens": 8192,
             "stream": True,
-            "messages": anthropic_messages(context["history"]) + extra_messages,
+            "messages": messages,
         }
         if context["system"]:
             body["system"] = context["system"]
         if tools:
             body["tools"] = anthropic_tools(tools)
+        if mode == "anthropic-bp":
+            if context["system"]:
+                body["system"] = [cached_text_block(context["system"])]
+            body["metadata"] = {"user_id": CACHE_USER_ID}
+            mark_rolling_user_breakpoint(body["messages"])
         return endpoint_url(preset["endpoint"], "/v1/messages"), body
 
+    messages = openai_messages(
+        context["system"], context["history"]
+    ) + copy.deepcopy(extra_messages)
     body = {
         "model": preset["model"],
         "stream": True,
         "stream_options": {"include_usage": True},
-        "messages": openai_messages(
-            context["system"], context["history"]
-        ) + extra_messages,
+        "messages": messages,
     }
     if tools:
         body["tools"] = openai_tools(tools)
     if host.endswith("openrouter.ai"):
         body["reasoning"] = {"enabled": True}
+    if mode == "or-blocks":
+        if body["messages"] and body["messages"][0].get("role") == "system":
+            mark_cache_breakpoint(body["messages"][0])
+        mark_rolling_user_breakpoint(body["messages"])
     return endpoint_url(preset["endpoint"], "/v1/chat/completions"), body
 
 
@@ -479,9 +546,10 @@ def stream_anthropic(response):
             detail = data.get("error", {})
             raise RuntimeError(detail.get("message") or "Anthropic upstream error.")
         if event_type == "message_start":
-            result.input_tokens = int(
-                data.get("message", {}).get("usage", {}).get("input_tokens", 0)
-            )
+            usage = data.get("message", {}).get("usage", {})
+            result.input_tokens = int(usage.get("input_tokens", 0))
+            result.cache_read_tokens = int(usage.get("cache_read_input_tokens", 0))
+            result.cache_write_tokens = int(usage.get("cache_creation_input_tokens", 0))
         elif event_type == "content_block_start":
             index = data.get("index", 0)
             block = data.get("content_block", {})
@@ -556,6 +624,10 @@ def stream_openai(response):
         usage = data.get("usage") or {}
         result.input_tokens = int(usage.get("prompt_tokens", result.input_tokens))
         result.output_tokens = int(usage.get("completion_tokens", result.output_tokens))
+        details = usage.get("prompt_tokens_details") or {}
+        cached_tokens = details.get("cached_tokens")
+        if cached_tokens is not None:
+            result.cache_read_tokens = int(cached_tokens)
         choices = data.get("choices") or []
         if not choices:
             continue
@@ -657,6 +729,7 @@ def tool_followup(format_name, result, tool_results):
 
 def chat_events(context):
     preset = context["preset"]
+    format_name = upstream_format(preset)
     tools = get_tools()
     extra_messages = []
     final_result = StreamResult()
@@ -675,7 +748,7 @@ def chat_events(context):
                         )
                     parser = (
                         stream_anthropic
-                        if preset["format"] == "anthropic"
+                        if format_name == "anthropic"
                         else stream_openai
                     )
                     current = StreamResult()
@@ -685,6 +758,8 @@ def chat_events(context):
                 final_result.thinking += current.thinking
                 final_result.input_tokens += current.input_tokens
                 final_result.output_tokens += current.output_tokens
+                final_result.cache_read_tokens += current.cache_read_tokens
+                final_result.cache_write_tokens += current.cache_write_tokens
                 if not current.tool_calls:
                     break
                 if round_number >= MAX_TOOL_ROUNDS:
@@ -699,7 +774,7 @@ def chat_events(context):
                         yield sse("tool_result", {"name": call["name"], "ok": False})
                     tool_results.append((call, value))
                 extra_messages.extend(
-                    tool_followup(preset["format"], current, tool_results)
+                    tool_followup(format_name, current, tool_results)
                 )
 
         if not final_result.text.strip():
@@ -735,6 +810,8 @@ def chat_events(context):
                 "usage": {
                     "input_tokens": final_result.input_tokens,
                     "output_tokens": final_result.output_tokens,
+                    "cache_read_tokens": final_result.cache_read_tokens,
+                    "cache_write_tokens": final_result.cache_write_tokens,
                     "context_pct": round(final_result.input_tokens / window, 6),
                 },
             },
