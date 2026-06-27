@@ -83,21 +83,28 @@ export function renderCalendar() {
   const today = todayChina();
   const details = selectedDayDetails(data, selectedDate);
   const hasCheckin = Boolean(details.checkin);
+  const isToday = selectedDate === today;
+  const checkinTitle = hasCheckin
+    ? (isToday ? "今天已记下" : "这天已记下")
+    : (isToday ? "今天还没记" : "这天还没有打卡记录");
+  const checkinSubtitle = hasCheckin
+    ? (details.checkin?.note || "连续陪伴，没有断过")
+    : (isToday ? "轻轻点一下，留下今天" : "点击日期查看那一天的记录");
   const body = `<main class="page">
     ${subpageTop("日历")}
     <section class="jnl-scroll">
       <div class="cal-head">
-        <div><div class="m">${name}</div><div class="y">${year}</div></div>
+        <div class="cal-title"><span class="m">${name}</span><span class="y">${year}</span></div>
         <div class="arrows"><button data-action="prev-month">${icon("chevL")}</button><button data-action="next-month">${icon("chevR")}</button></div>
       </div>
       <div class="cal-grid">
         ${["一", "二", "三", "四", "五", "六", "日"].map((d) => `<div class="wd">${d}</div>`).join("")}
         ${calendarCells(store.calendarMonth, data)}
       </div>
-      <div class="day-detail-head"><span>${esc(dateLabel(selectedDate))}</span><span>${selectedDate === today ? "今天" : selectedDate}</span></div>
-      <button class="checkin" ${selectedDate === today ? 'data-action="checkin"' : ""}>
+      <div class="day-detail-head"><span>${esc(dateLabel(selectedDate))}</span><span>${isToday ? "今天" : selectedDate}</span></div>
+      <button class="checkin" ${isToday ? 'data-action="checkin"' : ""}>
         <span class="ring">${icon("check")}</span>
-        <span class="info"><span class="t">${hasCheckin ? "这天已记下" : selectedDate === today ? "今天还没记" : "这天还没有打卡记录"}</span><span class="s">${esc(details.checkin?.note || "点击日期查看那一天的记录")}</span></span>
+        <span class="info"><span class="t">${checkinTitle}</span><span class="s">${esc(checkinSubtitle)}</span></span>
         <span class="streak">${data.streak || 0}<span class="u">天</span></span>
       </button>
       <div class="jnl-block-h"><span>待办 · TODO</span><button data-action="quick-todo">${icon("plus")}</button></div>
@@ -108,7 +115,7 @@ export function renderCalendar() {
       <div class="milestones">
         ${details.milestones.length ? details.milestones.map((item, index) => `<div class="ms-item ${index === 0 ? "filled" : ""}">
           <div class="date">${esc(item.date.replaceAll("-", " · "))}</div><div>${esc(item.title || item.name || "")}</div>
-        </div>`).join("") : `<div class="ms-item empty"><div class="date">${esc(selectedDate.replaceAll("-", " · "))}</div><div>这一天没有里程碑。</div></div>`}
+        </div>`).join("") : `<div class="ms-item empty">这一天没有里程碑。</div>`}
         ${details.anniversaries.map((item) => `<div class="ms-item filled anniversary"><div class="date">${esc(item.date.replaceAll("-", " · "))}</div><div>${esc(item.name)}</div></div>`).join("")}
       </div>
     </section>

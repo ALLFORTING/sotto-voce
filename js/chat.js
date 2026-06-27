@@ -158,27 +158,32 @@ export function streamNodes(message) {
 }
 
 export function appendStreamText(message, text) {
-  const { group, bubble } = streamNodes(message);
+  const { group } = streamNodes(message);
   if (!group || !text) return;
-  let current = bubble;
-  if (!current) {
-    current = document.createElement("div");
-    current.className = "msg-bubble";
-    group.append(current);
-  }
+  let current = group.lastElementChild;
   const appendText = (target, value) => {
     if (!target || !value) return;
     const last = target.lastChild;
     if (last?.nodeType === Node.TEXT_NODE) last.appendData(value);
     else target.append(document.createTextNode(value));
   };
-  String(text).split(/\n+/).forEach((part, index) => {
-    if (index > 0 && group) {
+  const ensureBubble = () => {
+    if (!current || message.pendingBubbleBreak) {
       current = document.createElement("div");
       current.className = "msg-bubble";
       group.append(current);
+      message.pendingBubbleBreak = false;
     }
-    appendText(current, part);
+    return current;
+  };
+  String(text).split(/(\n+)/).forEach((part) => {
+    if (!part) return;
+    if (/^\n+$/.test(part)) {
+      if (current?.textContent.trim()) message.pendingBubbleBreak = true;
+      return;
+    }
+    if (!part.trim() && !current) return;
+    appendText(ensureBubble(), part);
   });
 }
 
