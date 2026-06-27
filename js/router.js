@@ -513,7 +513,11 @@ document.addEventListener("click", async (event) => {
       const row = event.target.closest(".msg-row");
       const messageId = Number(row?.dataset.messageId || 0);
       const streamKey = row?.dataset.streamKey;
-      const message = store.messages.find((item) => item.id === messageId || item.streamKey === streamKey);
+      const messageIndex = Number(row?.dataset.messageIndex ?? -1);
+      const message = store.messages.find((item) =>
+        (messageId && Number(item.id) === messageId) ||
+        (streamKey && item.streamKey === streamKey)
+      ) || store.messages[messageIndex];
       if (message) {
         if (message.thinkingStarted) return;
         message.thinkingOpen = !message.thinkingOpen;

@@ -48,9 +48,10 @@ export function messageHtml(message, index, messages) {
   );
   const streamKey = message.streamKey ? ` data-stream-key="${esc(message.streamKey)}"` : "";
   const messageId = message.id ? ` data-message-id="${message.id}"` : "";
+  const messageIndex = ` data-message-index="${index}"`;
   const content = role === "ai" ? aiBubblesHtml(message) : plainText(message.content || "");
   return `${showCenterTime && message.created_at ? `<div class="msg-time-center">${formatDate(message.created_at)} ${formatTime(message.created_at)}</div>` : ""}
-    <article class="msg-row ${role} ${message.streaming ? "streaming" : ""} ${message.starred ? "starred" : ""}" data-role="${message.role}"${messageId}${streamKey}>
+    <article class="msg-row ${role} ${message.streaming ? "streaming" : ""} ${message.starred ? "starred" : ""}" data-role="${message.role}"${messageId}${streamKey}${messageIndex}>
       ${role === "ai" ? thoughtHtml(message) : ""}
       ${role === "ai" && toolsHtml(message) ? `<div class="tool-tags">${toolsHtml(message)}</div>` : ""}
       ${role === "ai" ? `<div class="ai-group">${content}</div>` : `<div class="msg-bubble">${content}</div>`}

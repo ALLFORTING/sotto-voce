@@ -134,7 +134,9 @@ export function plainMarkdown(value = "") {
 }
 
 export function plainText(value = "") {
-  return esc(value).replace(/\n/g, "<br>");
+  return esc(value)
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br>");
 }
 
 export function toast(message) {

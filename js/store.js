@@ -1,4 +1,4 @@
-export const VERSION = "20260625-b8";
+export const VERSION = "20260627-b1";
 
 const readJson = (key, fallback) => {
   try {
