@@ -28,6 +28,7 @@ import {
   renderChat,
   scrollChat,
   updateAutoFollow,
+  updateThoughtDom,
   updateStreamMeta
 } from "./chat.js";
 import {
@@ -521,7 +522,8 @@ document.addEventListener("click", async (event) => {
       if (message) {
         if (message.thinkingStarted) return;
         message.thinkingOpen = !message.thinkingOpen;
-        return render(renderChat());
+        updateThoughtDom(row, message);
+        return;
       }
     }
     if (action === "prev-month" || action === "next-month") {

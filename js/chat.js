@@ -182,20 +182,22 @@ export function appendStreamText(message, text) {
   });
 }
 
+export function updateThoughtDom(row, message) {
+  if (!row) return;
+  row.querySelector(".thought")?.remove();
+  row.querySelector(".thought-expanded")?.remove();
+  const html = thoughtHtml(message);
+  if (html) row.insertAdjacentHTML("afterbegin", html);
+}
+
 export function updateStreamMeta(message, final = false) {
   const { article, group, bubble } = streamNodes(message);
   if (!article) return;
-  const renderThought = () => {
-    article.querySelector(".thought")?.remove();
-    article.querySelector(".thought-expanded")?.remove();
-    const html = thoughtHtml(message);
-    if (html) article.insertAdjacentHTML("afterbegin", html);
-  };
   if (final) {
     article.classList.remove("streaming");
     message.thinkingOpen = false;
     if (message.id) article.dataset.messageId = message.id;
-    renderThought();
+    updateThoughtDom(article, message);
     if (group) group.innerHTML = aiBubblesHtml(message);
     else if (bubble) bubble.innerHTML = plainText(message.content);
     if (!article.querySelector(".msg-foot")) {
@@ -205,7 +207,7 @@ export function updateStreamMeta(message, final = false) {
       article.append(foot);
     }
   } else {
-    renderThought();
+    updateThoughtDom(article, message);
   }
 }
 
