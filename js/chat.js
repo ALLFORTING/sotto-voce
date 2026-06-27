@@ -119,7 +119,11 @@ export function renderLongPressMenu() {
   const left = store.longPress.role === "assistant"
     ? Math.max(18, rect.left)
     : Math.max(18, Math.min(393 - 212, rect.left + rect.width - 184));
-  const top = Math.min(650, rect.bottom + 8);
+  const menuHeight = 180;
+  const maxBottom = 750;
+  const top = (rect.bottom + 8 + menuHeight > maxBottom)
+    ? Math.max(8, rect.top - menuHeight)
+    : Math.min(maxBottom - menuHeight, rect.bottom + 8);
   const ai = store.longPress.role === "assistant";
   return `<div class="overlay-scrim chat-only" data-action="close-overlay"></div>
     <section class="long-press-menu" style="left:${left}px;top:${top}px">

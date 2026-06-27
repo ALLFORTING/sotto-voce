@@ -805,7 +805,12 @@ async function handleConversationAction(action) {
   if (!item) return;
   if (action === "rename") {
     const title = prompt("重命名会话", item.title);
-    if (title?.trim()) await api.patch(`/api/conversations/${id}`, { title: title.trim() });
+    if (title?.trim()) {
+      await api.patch(`/api/conversations/${id}`, { title: title.trim() });
+      await loadConversations(true);
+    }
+    store.longPress = null;
+    return render(renderChat());
   }
   if (action === "delete" && confirm("删除这个会话？")) {
     await api.delete(`/api/conversations/${id}`);

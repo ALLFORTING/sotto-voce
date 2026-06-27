@@ -93,6 +93,10 @@
   margin: 12px 18px 14px;
   border: 1px dashed var(--border);
   border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: var(--text-2);
   font-size: 13.5px;
   letter-spacing: 0.5px;
