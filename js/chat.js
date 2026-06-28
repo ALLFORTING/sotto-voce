@@ -32,7 +32,7 @@ function thoughtHtml(message) {
     : `Thought for ${Number(message.thinking_seconds || 0).toFixed(1)}s`;
   return `<div class="thought">
     <button data-action="toggle-thought" ${text ? "" : "disabled"}><span class="chev">${icon(open ? "chevD" : "chevR")}</span><span class="thought-clock">${icon("clock")}</span><span>${label}</span></button>
-  </div>${open && text ? `<div class="thought-expanded">${thoughtContentHtml(text)}</div>` : ""}`;
+  </div>${open && text ? `<div class="thought-expanded">${thoughtContentHtml(text)}${!message.thinkingStarted ? '<div class="thought-done">✓ Done</div>' : ''}</div>` : ""}`;
 }
 
 function toolsHtml(message) {
