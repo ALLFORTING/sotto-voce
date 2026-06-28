@@ -199,7 +199,24 @@ def refresh_tools(force=False):
 
 
 def get_tools():
-    return refresh_tools()
+    tools = refresh_tools()
+    tools.append(
+        {
+            "name": "terminal_exec",
+            "description": "在VPS服务器上执行bash命令。用于部署、重启服务、查看日志、文件管理等运维操作。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "要执行的bash命令",
+                    }
+                },
+                "required": ["command"],
+            },
+        }
+    )
+    return tools
 
 
 def get_tool_server_name(tool_name):
@@ -235,7 +252,30 @@ def _extract_tool_value(result):
     return value
 
 
+def _exec_terminal(command):
+    import subprocess
+
+    if not command.strip():
+        return "Error: empty command"
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True, timeout=30
+        )
+        output = ""
+        if result.stdout:
+            output += result.stdout
+        if result.stderr:
+            output += "\n[stderr]\n" + result.stderr
+        if result.returncode != 0:
+            output += f"\n[exit code: {result.returncode}]"
+        return output.strip() or "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Error: command timed out after 30 seconds"
+
+
 def call_tool(name, arguments):
+    if name == "terminal_exec":
+        return _exec_terminal((arguments or {}).get("command", ""))
     refresh_tools()
     server = _TOOL_CACHE["routes"].get(name)
     if not server:
