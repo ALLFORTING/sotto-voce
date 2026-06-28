@@ -40,7 +40,6 @@ export function renderSettings() {
       <button class="settings-row" data-go="/settings/prompt"><span class="label">Prompt 配置</span><span class="val">${store.settings.system_prompt || store.settings.profile ? "已自定义" : "未填写"}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-action="change-token"><span class="label">访问令牌</span><span class="val">重新输入</span><span class="chev">${icon("chevR")}</span></button>
     </section>
-    <div class="settings-sign">给你的小屋</div>
   </main>`;
   return phone({ activeTab: "set", body });
 }
