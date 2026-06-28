@@ -125,27 +125,29 @@ export function renderCalendar() {
 
 export function renderShelf() {
   const books = store.books || [];
+  const uploadIcon = `<label class="up-ic"><input hidden type="file" accept=".txt,text/plain" data-upload-book>${icon("upload")}</label>`;
   const body = `<main class="page">
-    ${subpageTop("伴读")}
-    ${books.length ? `<section class="book-list">
+    ${subpageTop("伴读", books.length ? uploadIcon : "")}
+    ${books.length ? `<section class="cv2-list jnl-scroll">
       ${books.map((book) => {
-        const progress = Math.round(Number(book.progress || 0) * 100);
-        return `<button class="book-item" data-go="/journal/books/${book.id}">
-          <span class="book-cover">${esc(book.title.slice(0, 6))}</span>
-          <span class="meta"><span class="bt">${esc(book.title)}</span><span class="ba">${esc(book.author || "未知作者")}</span>
-            <span class="prog"><span class="fill" style="width:${progress}%"></span></span>
-            <span class="last">${progress >= 100 ? "已读完" : `读到 ${progress}%`} · ${book.last_read_at ? formatDate(book.last_read_at) : "刚刚"}</span>
-          </span>
+        const page = book.current_page || 1;
+        const total = book.total_pages || 1;
+        const pct = Math.round((page / total) * 100);
+        const done = page >= total;
+        return `<button class="cv2-book" data-go="/journal/books/${book.id}">
+          <div class="head"><span class="bt">${esc(book.title)}</span><span class="pg">第 ${page} 页 / 共 ${total} 页</span></div>
+          <div class="prog"><div class="fill" style="width:${pct}%"></div></div>
+          <div class="last">${done ? "已读完" : ""} ${book.last_read_at ? formatDate(book.last_read_at) : ""}</div>
         </button>`;
       }).join("")}
-    </section>` : `<section class="shelf-empty">
+      <label class="cv2-up-card"><input hidden type="file" accept=".txt,text/plain" data-upload-book>${icon("upload")} 上传新书</label>
+    </section>` : `<section class="cv2-empty">
       <div class="ico">${icon("book")}</div>
-      <div>还没有书。<br>上传一本 txt，我们一起读，<br>读到哪都能停下来聊几句。</div>
-      <label class="up-btn">${icon("upload")} 上传 txt<input hidden type="file" accept=".txt,text/plain" data-upload-book></label>
+      <div class="txt">还没有正在读的书。\n上传一本，我陪你读。</div>
+      <label class="up-btn"><input hidden type="file" accept=".txt,text/plain" data-upload-book>${icon("upload")} 上传新书</label>
     </section>`}
-    ${books.length ? `<label class="add-btn">${icon("upload")} 上传 txt<input hidden type="file" accept=".txt,text/plain" data-upload-book></label>` : ""}
   </main>`;
-  return phone({ activeTab: "jnl", body });
+  return phone({ activeTab: "jnl", hideTab: true, body });
 }
 
 export function renderReader() {
