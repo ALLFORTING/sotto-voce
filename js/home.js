@@ -1,13 +1,15 @@
 import { esc, phone, relativeTime } from "./components.js";
 import { store } from "./store.js";
 
-function greetingHtml(value) {
-  const text = String(value || "晚上好，今天辛苦了。").replace("。", "");
-  if (text.includes("，")) {
-    const index = text.indexOf("，") + 1;
-    return `${esc(text.slice(0, index))}<br>${esc(text.slice(index))}。`;
-  }
-  return esc(`${text}。`);
+function greetingHtml() {
+  const hour = new Date().getHours();
+  let text;
+  if (hour >= 5 && hour < 11) text = "早上好";
+  else if (hour >= 11 && hour < 14) text = "中午好，吃了吗";
+  else if (hour >= 14 && hour < 18) text = "下午好";
+  else if (hour >= 18 && hour < 23) text = "晚上好，今天辛苦了";
+  else text = "还没睡？陪你聊会儿";
+  return `<h1 class="home-greet">${text}。</h1>`;
 }
 
 export function renderHome() {
@@ -17,7 +19,7 @@ export function renderHome() {
   const last = home.last_conversation || {};
   const body = `<main class="page home-page">
     <section class="home-hero">
-      <h1 class="home-greet">${greetingHtml(home.greeting)}</h1>
+      ${greetingHtml()}
     </section>
     <section class="home-days">
       <div class="label">${Number.isFinite(home.days_together) ? "在一起的第" : "设置起始日后开始计数"}</div>
