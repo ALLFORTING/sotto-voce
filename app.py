@@ -17,6 +17,7 @@ from llm import (
     generate_home_summary,
     load_chat_context,
     load_regeneration_context,
+    short_completion,
 )
 from mcp_client import (
     memory_archives,
@@ -913,6 +914,58 @@ def create_annotation(book_id):
             VALUES (?, ?, ?, ?, ?)
             """,
             (book_id, paragraph_index, role, content, now_iso()),
+        )
+        result = row_or_none(
+            conn, "SELECT * FROM book_annotations WHERE id = ?", (cursor.lastrowid,)
+        )
+    return jsonify(result), 201
+
+
+@app.post("/api/books/<int:book_id>/annotations/<int:paragraph_index>/ai-reply")
+def ai_reply_annotation(book_id, paragraph_index):
+    with connection() as conn:
+        book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
+        if not book:
+            return not_found("Book")
+        para = row_or_none(
+            conn,
+            """
+            SELECT content FROM book_paragraphs
+            WHERE book_id = ? AND paragraph_index = ?
+            """,
+            (book_id, paragraph_index),
+        )
+        if not para:
+            return not_found("Paragraph")
+        user_annos = conn.execute(
+            """
+            SELECT content FROM book_annotations
+            WHERE book_id = ? AND paragraph_index = ? AND role = 'user'
+            ORDER BY created_at
+            """,
+            (book_id, paragraph_index),
+        ).fetchall()
+        preset = conn.execute(
+            "SELECT * FROM api_presets WHERE active = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not preset:
+        return jsonify({"error": "No active API preset is configured."}), 409
+    user_thoughts = "\n".join(a["content"] for a in user_annos).strip()
+    prompt = (
+        f"婷正在读《{book['title']}》，读到这段话：\n\n"
+        f"“{para['content']}”\n\n"
+        f"她的想法：{user_thoughts}\n\n"
+        "请作为澄（她的伴侣），用简短温柔的方式回应她的想法。"
+        "不要复述原文，直接回应。1-3句话即可。"
+    )
+    reply = short_completion(dict(preset), prompt, max_tokens=200).strip()
+    with connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO book_annotations(book_id, paragraph_index, role, content, created_at)
+            VALUES (?, ?, 'ai', ?, ?)
+            """,
+            (book_id, paragraph_index, reply, now_iso()),
         )
         result = row_or_none(
             conn, "SELECT * FROM book_annotations WHERE id = ?", (cursor.lastrowid,)

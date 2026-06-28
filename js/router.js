@@ -640,6 +640,25 @@ document.addEventListener("click", async (event) => {
       go("/chat");
       setTimeout(() => sendMessage(`我们聊聊我刚读到的这一段：${excerpt}`, []), 450);
     }
+    const annoCta = event.target.closest(".anno-cta");
+    if (annoCta) {
+      const annoBlock = event.target.closest(".anno-block");
+      const pi = Number(annoBlock?.dataset.pi);
+      const book = (store.currentBook?.book || store.currentBook);
+      if (!book || Number.isNaN(pi)) return;
+      annoCta.textContent = "澄在想…";
+      annoCta.style.pointerEvents = "none";
+      try {
+        await api.post(`/api/books/${book.id}/annotations/${pi}/ai-reply`, {});
+        store.currentPage = await api.get(`/api/books/${book.id}/pages/${store.currentPage.page}`);
+        render(renderReader());
+      } catch (err) {
+        toast(err.message);
+        annoCta.textContent = "让澄也看看 →";
+        annoCta.style.pointerEvents = "";
+      }
+      return;
+    }
     const annoBlock = event.target.closest(".anno-block");
     if (annoBlock && route().startsWith("/journal/books/")) {
       if (event.target.closest(".anno-input")) return;
