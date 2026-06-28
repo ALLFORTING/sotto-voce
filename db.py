@@ -128,6 +128,23 @@ def init_db():
         last_read_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS book_paragraphs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        paragraph_index INTEGER NOT NULL,
+        page_number INTEGER NOT NULL,
+        content TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS book_annotations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        paragraph_index INTEGER NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('user', 'ai')),
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS usage_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         conversation_id INTEGER REFERENCES conversations(id),
@@ -161,6 +178,10 @@ def init_db():
         ON todos(done, due_date);
     CREATE INDEX IF NOT EXISTS idx_milestones_date
         ON milestones(date);
+    CREATE INDEX IF NOT EXISTS idx_book_paragraphs_book_page
+        ON book_paragraphs(book_id, page_number);
+    CREATE INDEX IF NOT EXISTS idx_book_annotations_book
+        ON book_annotations(book_id, paragraph_index);
     CREATE INDEX IF NOT EXISTS idx_usage_logs_created
         ON usage_logs(created_at);
     """
@@ -190,6 +211,12 @@ def init_db():
         }
         if "position" not in book_columns:
             conn.execute("ALTER TABLE books ADD COLUMN position INTEGER DEFAULT 0")
+        if "total_paragraphs" not in book_columns:
+            conn.execute("ALTER TABLE books ADD COLUMN total_paragraphs INTEGER DEFAULT 0")
+        if "total_pages" not in book_columns:
+            conn.execute("ALTER TABLE books ADD COLUMN total_pages INTEGER DEFAULT 0")
+        if "current_page" not in book_columns:
+            conn.execute("ALTER TABLE books ADD COLUMN current_page INTEGER DEFAULT 1")
         conn.executemany(
             "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
             [

@@ -183,6 +183,13 @@ def split_book_chapters(text):
     ]
 
 
+def split_book_paragraphs(text, per_page=25):
+    """按换行分段，去空段，每 per_page 段一页，返回 (paragraphs_list, total_pages)"""
+    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+    total_pages = max(1, -(-len(paragraphs) // per_page))
+    return paragraphs, total_pages
+
+
 def book_text(filename):
     path = BOOK_DIR / Path(filename).name
     if not path.exists():
@@ -784,6 +791,7 @@ def create_book():
     raw = file.read()
     text = decode_text_bytes(raw)
     chapters = split_book_chapters(text)
+    paragraphs, total_pages = split_book_paragraphs(text)
     timestamp = datetime.now(CHINA_TZ).strftime("%Y%m%d%H%M%S%f")
     stored_name = f"{timestamp}-{original_filename}"
     title = str(request.form.get("title") or Path(original_filename).stem).strip()
@@ -794,13 +802,34 @@ def create_book():
             """
             INSERT INTO books(
                 title, filename, original_filename, total_chars,
-                total_chapters, current_chapter, position, progress,
+                total_chapters, total_paragraphs, total_pages,
+                current_chapter, current_page, position, progress,
                 created_at, last_read_at
-            ) VALUES (?, ?, ?, ?, ?, 1, 0, 0, ?, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, 0, 0, ?, NULL)
             """,
-            (title, stored_name, file.filename, len(text), len(chapters), now_iso()),
+            (
+                title,
+                stored_name,
+                file.filename,
+                len(text),
+                len(chapters),
+                len(paragraphs),
+                total_pages,
+                now_iso(),
+            ),
         )
-        result = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (cursor.lastrowid,))
+        book_id = cursor.lastrowid
+        conn.executemany(
+            """
+            INSERT INTO book_paragraphs(book_id, paragraph_index, page_number, content)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (book_id, index, index // 25 + 1, paragraph)
+                for index, paragraph in enumerate(paragraphs)
+            ],
+        )
+        result = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
     return jsonify(result), 201
 
 
@@ -823,10 +852,95 @@ def get_book(book_id):
     )
 
 
+@app.get("/api/books/<int:book_id>/pages/<int:page>")
+def get_book_page(book_id, page):
+    with connection() as conn:
+        book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
+        if not book:
+            return not_found("Book")
+        paragraphs = conn.execute(
+            """
+            SELECT paragraph_index, content FROM book_paragraphs
+            WHERE book_id = ? AND page_number = ?
+            ORDER BY paragraph_index
+            """,
+            (book_id, page),
+        ).fetchall()
+        annotations = conn.execute(
+            """
+            SELECT * FROM book_annotations
+            WHERE book_id = ?
+              AND paragraph_index IN (
+                SELECT paragraph_index FROM book_paragraphs
+                WHERE book_id = ? AND page_number = ?
+              )
+            ORDER BY paragraph_index, created_at
+            """,
+            (book_id, book_id, page),
+        ).fetchall()
+        conn.execute(
+            "UPDATE books SET current_page = ?, last_read_at = ? WHERE id = ?",
+            (page, now_iso(), book_id),
+        )
+    return jsonify(
+        {
+            "book_id": book_id,
+            "page": page,
+            "total_pages": book.get("total_pages") or 1,
+            "paragraphs": rows_to_dicts(paragraphs),
+            "annotations": rows_to_dicts(annotations),
+        }
+    )
+
+
+@app.post("/api/books/<int:book_id>/annotations")
+def create_annotation(book_id):
+    data = payload()
+    paragraph_index = data.get("paragraph_index")
+    content = str(data.get("content") or "").strip()
+    role = data.get("role", "user")
+    if paragraph_index is None or not content:
+        return bad_request("paragraph_index and content are required.")
+    if role not in ("user", "ai"):
+        return bad_request("role must be 'user' or 'ai'.")
+    with connection() as conn:
+        book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
+        if not book:
+            return not_found("Book")
+        cursor = conn.execute(
+            """
+            INSERT INTO book_annotations(book_id, paragraph_index, role, content, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (book_id, paragraph_index, role, content, now_iso()),
+        )
+        result = row_or_none(
+            conn, "SELECT * FROM book_annotations WHERE id = ?", (cursor.lastrowid,)
+        )
+    return jsonify(result), 201
+
+
+@app.get("/api/books/<int:book_id>/annotations")
+def list_annotations(book_id):
+    with connection() as conn:
+        book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
+        if not book:
+            return not_found("Book")
+        rows = conn.execute(
+            """
+            SELECT * FROM book_annotations
+            WHERE book_id = ?
+            ORDER BY paragraph_index, created_at
+            """,
+            (book_id,),
+        ).fetchall()
+    return jsonify(rows_to_dicts(rows))
+
+
 @app.patch("/api/books/<int:book_id>")
 def update_book(book_id):
     data = payload()
-    allowed = {"title", "current_chapter", "progress", "position"}
+    allowed = {"title", "current_chapter", "current_page", "progress", "position"}
     updates = {key: data[key] for key in allowed if key in data}
     if not updates:
         return bad_request("No supported book fields were provided.")
@@ -843,6 +957,10 @@ def update_book(book_id):
                 chapter = nonnegative_int(updates["current_chapter"], "current_chapter")
                 total = max(1, int(book.get("total_chapters") or 1))
                 updates["current_chapter"] = max(1, min(chapter, total))
+            if "current_page" in updates:
+                page = nonnegative_int(updates["current_page"], "current_page")
+                total = max(1, int(book.get("total_pages") or 1))
+                updates["current_page"] = max(1, min(page, total))
             if "progress" in updates:
                 updates["progress"] = min(1.0, nonnegative_float(updates["progress"], "progress"))
             if "position" in updates:
