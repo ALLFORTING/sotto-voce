@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from db import connection, now_iso, parse_attachments
-from mcp_client import call_tool, get_tools
+from mcp_client import call_tool, get_tools, get_tool_server_name
 
 
 LOGGER = logging.getLogger(__name__)
@@ -378,14 +378,14 @@ def generate_home_summary(conversation_id):
     if not preset:
         return None
     transcript = "\n".join(
-        f"{'用户' if item['role'] == 'user' else '助手'}：{item['content'][:500]}"
+        f"{'婷' if item['role'] == 'user' else '澄'}：{item['content'][:500]}"
         for item in reversed(messages)
     )
     prompt = (
-        "把下面最近一段对话概括成不超过40个中文字符的一句纯文本。"
+        "把下面最近一段对话概括成不超过60个中文字符的一句纯文本。"
         "只写聊到的事情，不要标题、引号、Markdown符号或解释。\n" + transcript
     )
-    summary = plain_text(short_completion(dict(preset), prompt, 100), 40)
+    summary = plain_text(short_completion(dict(preset), prompt, 150), 60)
     if summary:
         with connection() as conn:
             conn.execute(
@@ -623,7 +623,8 @@ def stream_anthropic(response):
                     "input": tool_input,
                 }
                 result.tool_calls.append(call)
-                result.thinking += f"\n[mcp:{call['name']}]\n"
+                _server = get_tool_server_name(call["name"])
+                result.thinking += f"\n[mcp:{_server}.{call['name']}]\n"
                 yield "tool_use", {"name": call["name"], "input": tool_input}, result
         elif event_type == "message_delta":
             result.output_tokens = int(
@@ -697,7 +698,8 @@ def stream_openai(response):
             tool_input = {"_raw": entry["arguments"]}
         call = {"id": entry["id"], "name": entry["name"], "input": tool_input}
         result.tool_calls.append(call)
-        result.thinking += f"\n[mcp:{call['name']}]\n"
+        _server = get_tool_server_name(call["name"])
+        result.thinking += f"\n[mcp:{_server}.{call['name']}]\n"
         yield "tool_use", {"name": call["name"], "input": tool_input}, result
 
 

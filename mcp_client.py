@@ -202,6 +202,12 @@ def get_tools():
     return refresh_tools()
 
 
+def get_tool_server_name(tool_name):
+    routes = _TOOL_CACHE.get("routes", {})
+    server = routes.get(tool_name)
+    return server["name"] if server else "mcp"
+
+
 def _extract_tool_value(result):
     if not result:
         return None

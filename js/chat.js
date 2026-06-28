@@ -24,7 +24,10 @@ function thoughtContentHtml(text, done = false) {
       html += `<div class="thought-step"><span class="step-icon">${icon("clock")}</span><span class="step-text">${esc(content)}</span></div>`;
     } else {
       const name = content;
-      html += `<div class="thought-step tool"><span class="tool-label">mcp</span><span class="tool-action">${esc(name)}</span></div>`;
+      const dotIndex = name.indexOf(".");
+      const server = dotIndex > -1 ? name.slice(0, dotIndex) : "mcp";
+      const action = dotIndex > -1 ? name.slice(dotIndex + 1) : name;
+      html += `<div class="thought-step tool"><span class="tool-label">mcp · ${esc(server)}</span><span class="tool-action">${esc(action)}</span></div>`;
     }
   }
   if (done) {
