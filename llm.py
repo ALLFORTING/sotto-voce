@@ -173,12 +173,37 @@ def load_chat_context(conversation_id, content, attachments):
                 (conversation_id,),
             ).fetchall()
         ]
+        prev_context = None
+        if len(history) == 1:
+            prev_conv = conn.execute(
+                """
+                SELECT id FROM conversations
+                WHERE id != ? ORDER BY updated_at DESC LIMIT 1
+                """,
+                (conversation_id,),
+            ).fetchone()
+            if prev_conv:
+                prev_msgs = conn.execute(
+                    """
+                    SELECT role, content FROM messages
+                    WHERE conversation_id = ? AND deleted = 0
+                    ORDER BY id DESC LIMIT 4
+                    """,
+                    (prev_conv["id"],),
+                ).fetchall()
+                if prev_msgs:
+                    prev_context = "\n".join(
+                        f"{'用户' if m['role'] == 'user' else '澄'}：{m['content'][:300]}"
+                        for m in reversed(prev_msgs)
+                    )
 
     system = "\n\n".join(
         value.strip()
         for value in (settings.get("system_prompt", ""), settings.get("profile", ""))
         if value.strip()
     )
+    if prev_context:
+        system += f"\n\n[上一轮对话的最后几条消息，供你参考延续话题]\n{prev_context}"
     return {
         "conversation_id": conversation_id,
         "preset": dict(preset_row),
