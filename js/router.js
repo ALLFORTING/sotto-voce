@@ -3,6 +3,7 @@ import {
   errorPage,
   esc,
   formValue,
+  icon,
   loadingPage,
   phone,
   subpageTop,
@@ -124,6 +125,9 @@ async function loadBooks(force = false) {
 
 async function loadBook(id) {
   store.currentBook = await api.get(`/api/books/${id}`);
+  const book = store.currentBook.book || store.currentBook;
+  const page = book.current_page || 1;
+  store.currentPage = await api.get(`/api/books/${id}/pages/${page}`);
 }
 
 async function loadUsage(force = false) {
@@ -188,7 +192,11 @@ function hasWarmRouteCache(path) {
   if (path === "/chat") return Boolean(store.cacheAt.conversations || store.messages.length || store.conversationId);
   if (path === "/journal/calendar") return Boolean(store.calendar);
   if (path === "/journal/books") return Boolean(store.cacheAt.books || store.books.length);
-  if (path.startsWith("/journal/books/")) return Boolean(store.currentBook);
+  if (path.startsWith("/journal/books/")) {
+    const id = Number(path.split("/").pop());
+    const book = store.currentBook?.book || store.currentBook;
+    return Boolean(book && store.currentPage && Number(book.id) === id && Number(store.currentPage.book_id) === id);
+  }
   if (path === "/journal/ledger") return Boolean(store.usageSummary && store.usageDetail);
   if (path === "/memory") return store.memories.length > 0;
   if (path === "/memory/archive") return true;
@@ -509,7 +517,8 @@ document.addEventListener("click", async (event) => {
     }
     return;
   }
-  const action = event.target.closest("[data-action]")?.dataset.action;
+  const actionEl = event.target.closest("[data-action]");
+  const action = actionEl?.dataset.action;
   const id = Number(event.target.closest("[data-id]")?.dataset.id || 0);
   try {
     if (action === "back") return history.back();
@@ -555,6 +564,29 @@ document.addEventListener("click", async (event) => {
       store.terminalHistory.unshift(result);
       store.terminalHistory = store.terminalHistory.slice(0, 50);
       return render(renderTerminal());
+    }
+    if (action === "prev-page" || action === "next-page") {
+      const book = (store.currentBook?.book || store.currentBook);
+      if (!book) return;
+      const currentPage = store.currentPage?.page || book.current_page || 1;
+      const totalPages = book.total_pages || 1;
+      const newPage = action === "prev-page" ? Math.max(1, currentPage - 1) : Math.min(totalPages, currentPage + 1);
+      if (newPage === currentPage) return;
+      store.currentPage = await api.get(`/api/books/${book.id}/pages/${newPage}`);
+      await api.patch(`/api/books/${book.id}`, { current_page: newPage });
+      render(renderReader());
+      return;
+    }
+    if (action === "send-anno") {
+      const pi = Number(actionEl?.dataset.pi);
+      const input = document.querySelector(`.ph[data-anno-pi="${pi}"]`);
+      const content = input?.value?.trim();
+      if (!content) return;
+      const book = (store.currentBook?.book || store.currentBook);
+      await api.post(`/api/books/${book.id}/annotations`, { paragraph_index: pi, content, role: "user" });
+      store.currentPage = await api.get(`/api/books/${book.id}/pages/${store.currentPage.page}`);
+      render(renderReader());
+      return;
     }
     if (action === "toggle-thought") {
       const row = event.target.closest(".msg-row");
@@ -607,6 +639,33 @@ document.addEventListener("click", async (event) => {
       const excerpt = store.currentBook?.chapter?.content?.slice(0, 180) || "";
       go("/chat");
       setTimeout(() => sendMessage(`我们聊聊我刚读到的这一段：${excerpt}`, []), 450);
+    }
+    const annoBlock = event.target.closest(".anno-block");
+    if (annoBlock && route().startsWith("/journal/books/")) {
+      if (event.target.closest(".anno-input")) return;
+      const pi = annoBlock.dataset.pi;
+      const wasActive = annoBlock.classList.contains("active");
+      document.querySelectorAll(".anno-block.active").forEach((el) => {
+        if (el !== annoBlock) el.querySelectorAll(".anno-cta, .anno-input").forEach((child) => child.remove());
+        el.classList.remove("active");
+      });
+      if (!wasActive) {
+        annoBlock.classList.add("active");
+        if (!annoBlock.querySelector(".anno-input")) {
+          const cta = document.createElement("div");
+          cta.className = "anno-cta";
+          cta.textContent = "让澄也看看 →";
+          const inputBox = document.createElement("div");
+          inputBox.className = "anno-input";
+          inputBox.innerHTML = `<input class="ph" placeholder="写点想法…" data-anno-pi="${pi}"><button class="send" data-action="send-anno" data-pi="${pi}">${icon("send")}</button>`;
+          annoBlock.appendChild(cta);
+          annoBlock.appendChild(inputBox);
+          inputBox.querySelector(".ph").focus();
+        }
+      } else {
+        annoBlock.querySelectorAll(".anno-cta, .anno-input").forEach((el) => el.remove());
+      }
+      return;
     }
     if (action === "toggle-preset") {
       store.expandedPresetId = store.expandedPresetId === id ? null : id;

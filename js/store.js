@@ -33,6 +33,7 @@ export const store = {
   milestones: [],
   books: [],
   currentBook: null,
+  currentPage: null,
   usageSummary: null,
   usageDetail: null,
   memories: readJson("cheng_memory_buckets_v2", []),

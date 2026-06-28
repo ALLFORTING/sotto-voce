@@ -1,3 +1,4 @@
+import { api } from "./api.js";
 import { currency, esc, formatDate, icon, phone, subpageTop, tokenCount } from "./components.js";
 import { store } from "./store.js";
 
@@ -153,26 +154,52 @@ export function renderShelf() {
 export function renderReader() {
   const item = store.currentBook;
   if (!item) return phone({ activeTab: "jnl", hideTab: true, body: `<div class="loading-text">正在翻书…</div>` });
-  const book = item.book;
-  const chapter = item.chapter;
-  const progress = Math.round(Number(book.progress || 0) * 100);
-  const paragraphs = String(chapter.content || "这里还没有章节内容。")
-    .split(/\n{2,}|\n/)
-    .filter(Boolean)
-    .slice(0, 12);
+
+  const book = item.book || item;
+  const pageData = store.currentPage || {};
+  const page = pageData.page || book.current_page || 1;
+  const totalPages = pageData.total_pages || book.total_pages || 1;
+  const paragraphs = pageData.paragraphs || [];
+  const annotations = pageData.annotations || [];
+
+  const annoMap = {};
+  annotations.forEach((a) => {
+    (annoMap[a.paragraph_index] = annoMap[a.paragraph_index] || []).push(a);
+  });
+
   const body = `<main class="page">
-    <header class="reader-top">
+    <header class="reader-top-v2">
       <button class="ic" data-action="back">${icon("back")}</button>
       <div class="bt">${esc(book.title)}</div>
-      <button class="ic" data-action="reader-font">${icon("textSize")}</button>
+      <span class="pg">${page} / ${totalPages}</span>
     </header>
-    <section class="reader-body">
-      <div class="chap">${esc(chapter.title || `第 ${chapter.index} 章`)}</div>
-      ${paragraphs.map((p) => `<p>${esc(p)}</p>`).join("")}
+    <section class="reader-body-v2 jnl-scroll">
+      ${paragraphs.map((p) => {
+        const annos = annoMap[p.paragraph_index] || [];
+        if (annos.length) {
+          return `<div class="anno-block" data-pi="${p.paragraph_index}">
+            <p class="anno-para">${esc(p.content)}</p>
+            <div class="anno-bubbles">
+              ${annos.map((a) => `<div class="anno-b ${a.role === 'user' ? 'ting' : 'cheng'}">${esc(a.content)}</div>`).join("")}
+            </div>
+          </div>`;
+        }
+        return `<div class="anno-block" data-pi="${p.paragraph_index}"><p class="normal">${esc(p.content)}</p></div>`;
+      }).join("")}
     </section>
-    <footer class="reader-foot">
-      <div class="pbar-row"><span>${progress}%</span><span class="pbar"><span class="fill" style="width:${progress}%"></span><span class="knob" style="left:${progress}%"></span></span><span>第 ${chapter.index} / ${book.total_chapters} 章</span></div>
-      <button class="discuss" data-action="discuss-book">${icon("chat")} 聊聊这段</button>
+    <footer class="reader-foot-v2">
+      <div class="page-nav">
+        <button class="pg-btn" data-action="prev-page" ${page <= 1 ? "disabled" : ""}>${icon("back")}</button>
+        <div class="pg-mid"><span>${page}</span><span class="pbar"><span class="fill" style="width:${Math.round((page / totalPages) * 100)}%"></span></span><span>${totalPages}</span></div>
+        <button class="pg-btn" data-action="next-page" ${page >= totalPages ? "disabled" : ""}>${icon("forward")}</button>
+      </div>
+      <div class="reader-tools">
+        <button class="tool">目录</button>
+        <span class="tool-sep"></span>
+        <button class="tool" style="color:var(--accent)">批注列表</button>
+        <span class="tool-sep"></span>
+        <button class="tool">和澄聊</button>
+      </div>
     </footer>
   </main>`;
   return phone({ activeTab: "jnl", hideTab: true, body });
