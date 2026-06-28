@@ -48,7 +48,8 @@ import {
   renderApiSettings,
   renderMcpSettings,
   renderPrompt,
-  renderSettings
+  renderSettings,
+  renderTerminal
 } from "./settings.js";
 
 const app = document.querySelector("#app");
@@ -210,6 +211,10 @@ async function loadSettings(force = false) {
   store.cacheAt.settings = Date.now();
 }
 
+async function loadTerminalHistory() {
+  store.terminalHistory = await api.get("/api/terminal/history");
+}
+
 async function createConversation() {
   const item = await api.post("/api/conversations", {});
   rememberConversation(item.id);
@@ -230,6 +235,7 @@ async function prepare(path) {
   else if (path === "/journal/ledger") await loadUsage();
   else if (path === "/memory") await loadMemory("bucket");
   else if (path === "/memory/archive") await loadMemory("archive");
+  else if (path === "/settings/terminal") await loadTerminalHistory();
   else if (path.startsWith("/settings")) await loadSettings();
 }
 
@@ -247,6 +253,7 @@ function renderRoute(path) {
   if (path === "/settings/prompt") return renderPrompt();
   if (path === "/settings/api") return renderApiSettings();
   if (path === "/settings/mcp") return renderMcpSettings();
+  if (path === "/settings/terminal") return renderTerminal();
   if (path === "/settings/anniv") return renderAnniversaries();
   if (path === "/chat/search") return renderSearchPage();
   return renderHome();
@@ -539,6 +546,15 @@ document.addEventListener("click", async (event) => {
     if (action === "change-token") {
       clearToken();
       return render(tokenGate("请输入新的访问令牌。"));
+    }
+    if (action === "exec-command") {
+      const input = document.querySelector("#term-cmd-input");
+      const command = String(input?.value || "").trim();
+      if (!command) return;
+      const result = await api.post("/api/terminal/exec", { command });
+      store.terminalHistory.unshift(result);
+      store.terminalHistory = store.terminalHistory.slice(0, 50);
+      return render(renderTerminal());
     }
     if (action === "toggle-thought") {
       const row = event.target.closest(".msg-row");

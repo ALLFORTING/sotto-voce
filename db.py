@@ -141,6 +141,16 @@ def init_db():
         created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS terminal_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        command TEXT NOT NULL,
+        stdout TEXT,
+        stderr TEXT,
+        returncode INTEGER,
+        duration_ms INTEGER,
+        created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_conversations_updated
         ON conversations(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_conversation

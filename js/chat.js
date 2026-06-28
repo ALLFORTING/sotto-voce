@@ -31,7 +31,7 @@ function thoughtContentHtml(text, done = false) {
     }
   }
   if (done) {
-    html += '<div class="thought-step done"><span class="step-icon">✓</span><span class="step-text">Done</span></div>';
+    html += `<div class="thought-step done"><span class="step-icon">${icon("check")}</span><span class="step-text">Done</span></div>`;
   }
   html += "</div>";
   return html;

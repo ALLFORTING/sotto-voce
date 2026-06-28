@@ -1015,6 +1015,57 @@ def update_settings():
     return get_settings()
 
 
+@app.post("/api/terminal/exec")
+def terminal_exec():
+    data = payload()
+    command = str(data.get("command") or "").strip()
+    if not command:
+        return bad_request("command is required.")
+    import subprocess
+    import time
+
+    created_at = now_iso()
+    start = time.monotonic()
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True, timeout=30
+        )
+        stdout = result.stdout
+        stderr = result.stderr
+        returncode = result.returncode
+    except subprocess.TimeoutExpired:
+        stdout = ""
+        stderr = "Command timed out after 30 seconds."
+        returncode = -1
+    duration_ms = int((time.monotonic() - start) * 1000)
+    with connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO terminal_logs(command, stdout, stderr, returncode, duration_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (command, stdout, stderr, returncode, duration_ms, created_at),
+        )
+    return jsonify(
+        {
+            "command": command,
+            "stdout": stdout,
+            "stderr": stderr,
+            "returncode": returncode,
+            "duration_ms": duration_ms,
+        }
+    )
+
+
+@app.get("/api/terminal/history")
+def terminal_history():
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM terminal_logs ORDER BY id DESC LIMIT 50"
+        ).fetchall()
+    return jsonify([dict(row) for row in rows])
+
+
 @app.get("/api/home")
 def home():
     china_now = datetime.now(CHINA_TZ)

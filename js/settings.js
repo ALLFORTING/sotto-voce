@@ -36,12 +36,34 @@ export function renderSettings() {
       <div class="group-label">SYSTEM</div>
       <button class="settings-row" data-go="/settings/api"><span class="label">模型与接口</span><span class="val">${esc(activePreset?.name || "未配置")}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/mcp"><span class="label">MCP 服务</span><span class="val">${store.mcpServers.length} 个</span><span class="chev">${icon("chevR")}</span></button>
+      <button class="settings-row" data-go="/settings/terminal"><span class="label">终端</span><span class="val">VPS 命令行</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/prompt"><span class="label">Prompt 配置</span><span class="val">${store.settings.system_prompt || store.settings.profile ? "已自定义" : "未填写"}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-action="change-token"><span class="label">访问令牌</span><span class="val">重新输入</span><span class="chev">${icon("chevR")}</span></button>
     </section>
     <div class="settings-sign">给你的小屋</div>
   </main>`;
   return phone({ activeTab: "set", body });
+}
+
+export function renderTerminal() {
+  const logs = store.terminalHistory || [];
+  const body = `<main class="page">
+    ${subpageTop("终端")}
+    <div class="terminal-scroll scroll">
+      ${logs.length ? logs.map((log) => `
+        <div class="term-entry ${log.returncode === 0 ? "" : "error"}">
+          <div class="term-cmd">$ ${esc(log.command)}</div>
+          ${log.stdout ? `<pre class="term-out">${esc(log.stdout)}</pre>` : ""}
+          ${log.stderr ? `<pre class="term-err">${esc(log.stderr)}</pre>` : ""}
+        </div>
+      `).reverse().join("") : '<div class="term-empty">还没有执行过命令</div>'}
+    </div>
+    <div class="term-input-wrap">
+      <input class="term-input" type="text" placeholder="输入命令..." id="term-cmd-input">
+      <button class="term-run" data-action="exec-command">运行</button>
+    </div>
+  </main>`;
+  return phone({ activeTab: "set", hideTab: true, body });
 }
 
 export function renderPrompt() {

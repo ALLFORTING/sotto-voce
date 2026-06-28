@@ -46,6 +46,7 @@ export const store = {
   presets: [],
   mcpServers: [],
   anniversaries: [],
+  terminalHistory: [],
   cacheAt: {
     home: Number(localStorage.getItem("cheng_home_v2_at") || 0),
     conversations: Number(localStorage.getItem("cheng_conversations_v2_at") || 0),
