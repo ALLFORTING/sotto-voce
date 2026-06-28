@@ -220,6 +220,8 @@ def get_tools():
 
 
 def get_tool_server_name(tool_name):
+    if tool_name == "terminal_exec":
+        return "terminal"
     routes = _TOOL_CACHE.get("routes", {})
     server = routes.get(tool_name)
     return server["name"] if server else "mcp"
@@ -253,13 +255,23 @@ def _extract_tool_value(result):
 
 
 def _exec_terminal(command):
+    import os
     import subprocess
 
     if not command.strip():
         return "Error: empty command"
+    env = os.environ.copy()
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "safe.directory"
+    env["GIT_CONFIG_VALUE_0"] = "*"
     try:
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=30
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
         )
         output = ""
         if result.stdout:

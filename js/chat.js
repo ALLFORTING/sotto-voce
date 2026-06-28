@@ -27,7 +27,7 @@ function thoughtContentHtml(text, done = false) {
       const dotIndex = name.indexOf(".");
       const server = dotIndex > -1 ? name.slice(0, dotIndex) : "mcp";
       const action = dotIndex > -1 ? name.slice(dotIndex + 1) : name;
-      html += `<div class="thought-step tool"><span class="tool-label">mcp · ${esc(server)}</span><span class="tool-action">${esc(action)}</span></div>`;
+      html += `<div class="thought-step tool"><span class="tool-label">${esc(server)}</span><span class="tool-action">${esc(action)}</span></div>`;
     }
   }
   if (done) {

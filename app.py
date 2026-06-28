@@ -1026,9 +1026,18 @@ def terminal_exec():
 
     created_at = now_iso()
     start = time.monotonic()
+    env = os.environ.copy()
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "safe.directory"
+    env["GIT_CONFIG_VALUE_0"] = "*"
     try:
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=30
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
         )
         stdout = result.stdout
         stderr = result.stderr
