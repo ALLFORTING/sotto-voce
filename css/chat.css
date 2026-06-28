@@ -239,42 +239,76 @@
   opacity: 0.7;
 }
 
-.thought-clock {
-  display: inline-flex;
-  width: 12px;
-  height: 12px;
-}
-
-.thought-clock svg {
-  width: 12px;
-  height: 12px;
-}
-
 .thought-expanded {
   margin: 0 0 8px 4px;
   padding: 4px 0 8px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-left: 1px solid var(--border);
   color: var(--text-2);
 }
 
-.thought-done {
-  margin-top: 12px;
-  color: var(--accent);
-  font-size: 13px;
+.thought-timeline {
+  position: relative;
+  padding-left: 24px;
+  border-left: 1.5px solid var(--border-soft);
+  margin-left: 8px;
 }
 
 .thought-step {
-  padding-left: 8px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  text-wrap: pretty;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.step-icon {
+  position: absolute;
+  left: -33px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.step-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.step-text {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.thought-step.tool {
+  margin: 4px 0 12px 0;
+}
+
+.tool-label,
+.tool-action {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 16px;
+  margin-right: 4px;
 }
 
 .thought-step.done {
+  margin-bottom: 0;
+}
+
+.thought-step.done .step-icon {
   color: var(--accent);
+}
+
+.thought-step.done .step-text {
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .tool-tag {

@@ -14,13 +14,27 @@ function aiBubblesHtml(message) {
   return parts.map((part) => `<div class="msg-bubble">${plainText(part)}</div>`).join("");
 }
 
-function thoughtContentHtml(text) {
-  return String(text || "")
-    .split(/\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => `<div class="thought-step">${esc(part)}</div>`)
-    .join("");
+function thoughtContentHtml(text, done = false) {
+  const parts = String(text || "").split(/\[mcp:([^\]]+)\]/);
+  let html = '<div class="thought-timeline">';
+  for (let i = 0; i < parts.length; i++) {
+    const content = parts[i].trim();
+    if (!content) continue;
+    if (i % 2 === 0) {
+      html += `<div class="thought-step"><span class="step-icon">${icon("clock")}</span><span class="step-text">${esc(content)}</span></div>`;
+    } else {
+      const name = content;
+      const dotIndex = name.indexOf(".");
+      const server = dotIndex > -1 ? name.slice(0, dotIndex) : "mcp";
+      const action = dotIndex > -1 ? name.slice(dotIndex + 1) : name;
+      html += `<div class="thought-step tool"><span class="tool-label">mcp · ${esc(server)}</span><span class="tool-action">${esc(action)}</span></div>`;
+    }
+  }
+  if (done) {
+    html += '<div class="thought-step done"><span class="step-icon">✓</span><span class="step-text">Done</span></div>';
+  }
+  html += "</div>";
+  return html;
 }
 
 function thoughtHtml(message) {
@@ -31,8 +45,11 @@ function thoughtHtml(message) {
     ? "Thinking..."
     : `Thought for ${Number(message.thinking_seconds || 0).toFixed(1)}s`;
   return `<div class="thought">
-    <button data-action="toggle-thought" ${text ? "" : "disabled"}><span class="chev">${icon(open ? "chevD" : "chevR")}</span><span class="thought-clock">${icon("clock")}</span><span>${label}</span></button>
-  </div>${open && text ? `<div class="thought-expanded">${thoughtContentHtml(text)}${!message.thinkingStarted ? '<div class="thought-done">✓ Done</div>' : ''}</div>` : ""}`;
+    <button data-action="toggle-thought" ${text ? "" : "disabled"}>
+      <span class="chev">${icon(open ? "chevD" : "chevR")}</span>
+      <span>${label}</span>
+    </button>
+  </div>${open && text ? `<div class="thought-expanded">${thoughtContentHtml(text, !message.thinkingStarted)}</div>` : ""}`;
 }
 
 function toolsHtml(message) {

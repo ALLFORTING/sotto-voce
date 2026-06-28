@@ -623,6 +623,7 @@ def stream_anthropic(response):
                     "input": tool_input,
                 }
                 result.tool_calls.append(call)
+                result.thinking += f"\n[mcp:{call['name']}]\n"
                 yield "tool_use", {"name": call["name"], "input": tool_input}, result
         elif event_type == "message_delta":
             result.output_tokens = int(
@@ -696,6 +697,7 @@ def stream_openai(response):
             tool_input = {"_raw": entry["arguments"]}
         call = {"id": entry["id"], "name": entry["name"], "input": tool_input}
         result.tool_calls.append(call)
+        result.thinking += f"\n[mcp:{call['name']}]\n"
         yield "tool_use", {"name": call["name"], "input": tool_input}, result
 
 
