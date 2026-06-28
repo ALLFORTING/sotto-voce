@@ -865,7 +865,7 @@ if ("serviceWorker" in navigator) {
 }
 
 document.addEventListener("touchmove", (event) => {
-  if (!event.target.closest(".scroll, .chat-stream, .drawer-list, .es-body, .home-page")) {
+  if (!event.target.closest(".scroll, .chat-stream, .drawer-list, .es-body, .home-page, .jnl-scroll, .book-list, .reader-body")) {
     event.preventDefault();
   }
 }, { passive: false });
