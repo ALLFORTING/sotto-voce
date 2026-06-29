@@ -272,7 +272,7 @@ def load_regeneration_context(message_id):
     }
 
 
-def short_completion(preset, prompt, max_tokens=100):
+def short_completion(preset, prompt, max_tokens=100, system=""):
     headers = auth_headers(preset)
     headers["Accept"] = "application/json"
     format_name = upstream_format(preset)
@@ -284,13 +284,19 @@ def short_completion(preset, prompt, max_tokens=100):
             "stream": False,
             "messages": [{"role": "user", "content": prompt}],
         }
+        if system:
+            body["system"] = system
     else:
         url = endpoint_url(preset["endpoint"], "/v1/chat/completions")
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         body = {
             "model": preset["model"],
             "max_tokens": max_tokens,
             "stream": False,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
         }
     with httpx.Client(timeout=httpx.Timeout(45.0, connect=20.0)) as client:
         response = client.post(url, headers=headers, json=body)

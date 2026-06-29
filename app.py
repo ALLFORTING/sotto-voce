@@ -184,21 +184,9 @@ def split_book_chapters(text):
     ]
 
 
-def split_book_paragraphs(text, chars_per_line=21, lines_per_page=20):
-    """按换行分段，按行数估算分页"""
-    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
-    page = 1
-    used_lines = 0
-    result = []
-    for paragraph in paragraphs:
-        para_lines = -(-len(paragraph) // chars_per_line) + 1
-        if used_lines > 0 and used_lines + para_lines > lines_per_page:
-            page += 1
-            used_lines = 0
-        result.append((paragraph, page))
-        used_lines += para_lines
-    total_pages = page if result else 1
-    return result, total_pages
+def split_book_paragraphs(text):
+    """按换行分段，去空段"""
+    return [p.strip() for p in text.split("\n") if p.strip()]
 
 
 def book_text(filename):
@@ -802,7 +790,7 @@ def create_book():
     raw = file.read()
     text = decode_text_bytes(raw)
     chapters = split_book_chapters(text)
-    paragraphs, total_pages = split_book_paragraphs(text)
+    paragraphs = split_book_paragraphs(text)
     timestamp = datetime.now(CHINA_TZ).strftime("%Y%m%d%H%M%S%f")
     stored_name = f"{timestamp}-{original_filename}"
     title = str(request.form.get("title") or Path(original_filename).stem).strip()
@@ -825,7 +813,7 @@ def create_book():
                 len(text),
                 len(chapters),
                 len(paragraphs),
-                total_pages,
+                1,
                 now_iso(),
             ),
         )
@@ -833,11 +821,11 @@ def create_book():
         conn.executemany(
             """
             INSERT INTO book_paragraphs(book_id, paragraph_index, page_number, content)
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, 1, ?)
             """,
             [
-                (book_id, index, page_number, paragraph)
-                for index, (paragraph, page_number) in enumerate(paragraphs)
+                (book_id, index, paragraph)
+                for index, paragraph in enumerate(paragraphs)
             ],
         )
         result = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
@@ -904,6 +892,37 @@ def get_book_page(book_id, page):
     )
 
 
+@app.get("/api/books/<int:book_id>/all")
+def get_book_all(book_id):
+    with connection() as conn:
+        book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
+        if not book:
+            return not_found("Book")
+        paragraphs = conn.execute(
+            """
+            SELECT paragraph_index, content FROM book_paragraphs
+            WHERE book_id = ?
+            ORDER BY paragraph_index
+            """,
+            (book_id,),
+        ).fetchall()
+        annotations = conn.execute(
+            """
+            SELECT * FROM book_annotations
+            WHERE book_id = ?
+            ORDER BY paragraph_index, created_at
+            """,
+            (book_id,),
+        ).fetchall()
+    return jsonify(
+        {
+            "book": book,
+            "paragraphs": rows_to_dicts(paragraphs),
+            "annotations": rows_to_dicts(annotations),
+        }
+    )
+
+
 @app.post("/api/books/<int:book_id>/annotations")
 def create_annotation(book_id):
     data = payload()
@@ -958,8 +977,22 @@ def ai_reply_annotation(book_id, paragraph_index):
         preset = conn.execute(
             "SELECT * FROM api_presets WHERE active = 1 ORDER BY id DESC LIMIT 1"
         ).fetchone()
+        settings = {
+            row["key"]: row["value"] or ""
+            for row in conn.execute(
+                """
+                SELECT key, value FROM settings
+                WHERE key IN ('system_prompt', 'profile')
+                """
+            ).fetchall()
+        }
     if not preset:
         return jsonify({"error": "No active API preset is configured."}), 409
+    system = "\n\n".join(
+        value.strip()
+        for value in (settings.get("system_prompt", ""), settings.get("profile", ""))
+        if value.strip()
+    )
     user_thoughts = "\n".join(a["content"] for a in user_annos).strip()
     prompt = (
         f"婷正在读《{book['title']}》，读到这段话：\n\n"
@@ -968,7 +1001,7 @@ def ai_reply_annotation(book_id, paragraph_index):
         "请作为澄（她的伴侣），用简短温柔的方式回应她的想法。"
         "不要复述原文，直接回应。1-3句话即可。"
     )
-    reply = short_completion(dict(preset), prompt, max_tokens=200).strip()
+    reply = short_completion(dict(preset), prompt, max_tokens=200, system=system).strip()
     with connection() as conn:
         cursor = conn.execute(
             """
@@ -998,6 +1031,21 @@ def list_annotations(book_id):
             (book_id,),
         ).fetchall()
     return jsonify(rows_to_dicts(rows))
+
+
+@app.post("/api/books/<int:book_id>/progress")
+def update_book_progress(book_id):
+    data = payload()
+    scroll_pct = float(data.get("scroll_pct", 0))
+    with connection() as conn:
+        book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
+        if not book:
+            return not_found("Book")
+        conn.execute(
+            "UPDATE books SET progress = ?, last_read_at = ? WHERE id = ?",
+            (round(scroll_pct, 2), now_iso(), book_id),
+        )
+    return jsonify({"ok": True})
 
 
 @app.patch("/api/books/<int:book_id>")

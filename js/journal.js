@@ -1,4 +1,3 @@
-import { api } from "./api.js";
 import { currency, esc, formatDate, icon, phone, subpageTop, tokenCount } from "./components.js";
 import { store } from "./store.js";
 
@@ -152,15 +151,12 @@ export function renderShelf() {
 }
 
 export function renderReader() {
-  const item = store.currentBook;
-  if (!item) return phone({ activeTab: "jnl", hideTab: true, body: `<div class="loading-text">正在翻书…</div>` });
+  const data = store.bookData;
+  if (!data) return phone({ activeTab: "jnl", hideTab: true, body: `<div class="loading-text">正在翻书…</div>` });
 
-  const book = item.book || item;
-  const pageData = store.currentPage || {};
-  const page = pageData.page || book.current_page || 1;
-  const totalPages = pageData.total_pages || book.total_pages || 1;
-  const paragraphs = pageData.paragraphs || [];
-  const annotations = pageData.annotations || [];
+  const book = data.book;
+  const paragraphs = data.paragraphs || [];
+  const annotations = data.annotations || [];
 
   const annoMap = {};
   annotations.forEach((a) => {
@@ -171,34 +167,36 @@ export function renderReader() {
     <header class="reader-top-v2">
       <button class="ic" data-action="back">${icon("back")}</button>
       <div class="bt">${esc(book.title)}</div>
-      <span class="pg">${page} / ${totalPages}</span>
+      <span class="pg reader-pct">${book.progress || 0}%</span>
     </header>
-    <section class="reader-body-v2 jnl-scroll">
-      ${paragraphs.map((p) => {
-        const annos = annoMap[p.paragraph_index] || [];
-        if (annos.length) {
-          return `<div class="anno-block" data-pi="${p.paragraph_index}">
-            <p class="anno-para">${esc(p.content)}</p>
-            <div class="anno-bubbles">
-              ${annos.map((a) => `<div class="anno-b ${a.role === 'user' ? 'ting' : 'cheng'}">${esc(a.content)}</div>`).join("")}
-            </div>
-          </div>`;
-        }
-        return `<div class="anno-block" data-pi="${p.paragraph_index}"><p class="normal">${esc(p.content)}</p></div>`;
-      }).join("")}
+    <section class="reader-body-v2">
+      <div class="reader-inner">
+        ${paragraphs.map((p) => {
+          const annos = annoMap[p.paragraph_index] || [];
+          if (annos.length) {
+            return `<div class="anno-block" data-pi="${p.paragraph_index}">
+              <p class="anno-para">${esc(p.content)}</p>
+              <div class="anno-bubbles">
+                ${annos.map((a) => `<div class="anno-b ${a.role === 'user' ? 'ting' : 'cheng'}">${esc(a.content)}</div>`).join("")}
+              </div>
+            </div>`;
+          }
+          return `<div class="anno-block" data-pi="${p.paragraph_index}"><p class="normal">${esc(p.content)}</p></div>`;
+        }).join("")}
+      </div>
     </section>
     <footer class="reader-foot-v2">
-      <div class="page-nav">
-        <button class="pg-btn" data-action="prev-page" ${page <= 1 ? "disabled" : ""}>${icon("back")}</button>
-        <div class="pg-mid"><span>${page}</span><span class="pbar"><span class="fill" style="width:${Math.round((page / totalPages) * 100)}%"></span></span><span>${totalPages}</span></div>
-        <button class="pg-btn" data-action="next-page" ${page >= totalPages ? "disabled" : ""}>${icon("forward")}</button>
+      <div class="reader-progress">
+        <span class="reader-page-info">0 / 0</span>
+        <span class="pbar"><span class="fill" style="width:0%"></span></span>
+        <span class="pct">${book.progress || 0}%</span>
       </div>
       <div class="reader-tools">
-        <button class="tool">目录</button>
+        <button class="tool" data-action="show-toc">目录</button>
         <span class="tool-sep"></span>
-        <button class="tool" style="color:var(--accent)">批注列表</button>
+        <button class="tool" data-action="show-annotations" style="color:var(--accent)">批注列表</button>
         <span class="tool-sep"></span>
-        <button class="tool">和澄聊</button>
+        <button class="tool" data-action="chat-about-book">和澄聊</button>
       </div>
     </footer>
   </main>`;

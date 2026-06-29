@@ -125,10 +125,8 @@ async function loadBooks(force = false) {
 }
 
 async function loadBook(id) {
-  store.currentBook = await api.get(`/api/books/${id}`);
-  const book = store.currentBook.book || store.currentBook;
-  const page = book.current_page || 1;
-  store.currentPage = await api.get(`/api/books/${id}/pages/${page}`);
+  store.bookData = await api.get(`/api/books/${id}/all`);
+  store.readerPage = 0;
 }
 
 async function loadUsage(force = false) {
@@ -195,8 +193,7 @@ function hasWarmRouteCache(path) {
   if (path === "/journal/books") return Boolean(store.cacheAt.books || store.books.length);
   if (path.startsWith("/journal/books/")) {
     const id = Number(path.split("/").pop());
-    const book = store.currentBook?.book || store.currentBook;
-    return Boolean(book && store.currentPage && Number(book.id) === id && Number(store.currentPage.book_id) === id);
+    return Boolean(store.bookData?.book && Number(store.bookData.book.id) === id);
   }
   if (path === "/journal/ledger") return Boolean(store.usageSummary && store.usageDetail);
   if (path === "/memory") return store.memories.length > 0;
@@ -268,6 +265,63 @@ function renderRoute(path) {
   return renderHome();
 }
 
+function isReaderPath(path = route()) {
+  return path.startsWith("/journal/books/") && path !== "/journal/books";
+}
+
+function scheduleReaderInit(path = route()) {
+  if (isReaderPath(path)) requestAnimationFrame(() => initReader());
+}
+
+function renderReaderKeepingPage(page = store.readerPage) {
+  render(renderReader());
+  requestAnimationFrame(() => {
+    initReader();
+    goReaderPage(page);
+  });
+}
+
+function initReader() {
+  const body = document.querySelector(".reader-body-v2");
+  const inner = document.querySelector(".reader-inner");
+  if (!body || !inner) return;
+  const pageHeight = body.clientHeight;
+  if (!pageHeight) return;
+  const totalHeight = inner.scrollHeight;
+  const totalPages = Math.max(1, Math.ceil(totalHeight / pageHeight));
+  const book = store.bookData?.book;
+  const savedPct = book?.progress || 0;
+  store.readerPage = Math.round(savedPct / 100 * (totalPages - 1));
+  store.readerTotalPages = totalPages;
+  store.readerPageHeight = pageHeight;
+  goReaderPage(store.readerPage);
+}
+
+function goReaderPage(page) {
+  const inner = document.querySelector(".reader-inner");
+  if (!inner) return;
+  const total = store.readerTotalPages || 1;
+  page = Math.max(0, Math.min(page, total - 1));
+  store.readerPage = page;
+  inner.style.transform = `translateY(-${page * store.readerPageHeight}px)`;
+  inner.style.transition = "transform 0.25s ease";
+  const pct = total <= 1 ? 100 : Math.round(page / (total - 1) * 100);
+  const pctEl = document.querySelector(".reader-pct");
+  const fillEl = document.querySelector(".reader-progress .fill");
+  const infoEl = document.querySelector(".reader-page-info");
+  const footPct = document.querySelector(".reader-progress .pct");
+  if (pctEl) pctEl.textContent = `${pct}%`;
+  if (fillEl) fillEl.style.width = `${pct}%`;
+  if (infoEl) infoEl.textContent = `${page + 1} / ${total}`;
+  if (footPct) footPct.textContent = `${pct}%`;
+  if (store.bookData?.book) store.bookData.book.progress = pct;
+  clearTimeout(store._progressTimer);
+  store._progressTimer = setTimeout(() => {
+    const book = store.bookData?.book;
+    if (book) api.post(`/api/books/${book.id}/progress`, { scroll_pct: pct }).catch(console.warn);
+  }, 2000);
+}
+
 function renderSearchPage(results = []) {
   const rows = results.map((item) => `<button class="search-result" data-search-conversation="${item.conversation_id}">
     <span class="top"><span class="who">${item.role === "assistant" ? "澄" : "我"}</span><span>${esc(item.created_at?.slice(0, 10) || "")}</span></span>
@@ -292,12 +346,17 @@ async function navigate() {
     return;
   }
   if (path === "/memory/archive" && !store.archives.length) store.archiveLoading = true;
-  if (hasWarmRouteCache(path)) render(renderRoute(path));
-  else render(loadingPage());
+  if (hasWarmRouteCache(path)) {
+    render(renderRoute(path));
+    scheduleReaderInit(path);
+  } else {
+    render(loadingPage());
+  }
   try {
     await prepare(path);
     if (id !== navigationId || path !== route()) return;
     render(renderRoute(path));
+    scheduleReaderInit(path);
   } catch (error) {
     if (id !== navigationId) return;
     render(errorPage(error.message));
@@ -516,6 +575,18 @@ document.addEventListener("click", async (event) => {
   if (store.longPress?.role === "book" && !event.target.closest(".long-press-menu") && !event.target.closest(".overlay-scrim")) {
     return dismissLongPress();
   }
+  const jumpPi = event.target.closest("[data-jump-pi]");
+  if (jumpPi) {
+    const pi = Number(jumpPi.dataset.jumpPi);
+    const block = document.querySelector(`.anno-block[data-pi="${pi}"]`);
+    if (block && store.readerPageHeight) {
+      const page = Math.floor(block.offsetTop / store.readerPageHeight);
+      goReaderPage(page);
+    }
+    const overlay = document.querySelector(".phone-overlay-layer");
+    if (overlay) overlay.innerHTML = "";
+    return;
+  }
   const goTarget = event.target.closest("[data-go]");
   if (goTarget) {
     event.preventDefault();
@@ -562,7 +633,9 @@ document.addEventListener("click", async (event) => {
       store.plusOpen = false;
       store.longPress = null;
       store.bucketEdit = null;
-      return render(renderRoute(route()));
+      render(renderRoute(route()));
+      scheduleReaderInit();
+      return;
     }
     if (action === "new-conversation") {
       await createConversation();
@@ -582,30 +655,17 @@ document.addEventListener("click", async (event) => {
       store.terminalHistory = store.terminalHistory.slice(0, 50);
       return render(renderTerminal());
     }
-    if (action === "prev-page" || action === "next-page") {
-      const book = (store.currentBook?.book || store.currentBook);
-      if (!book) return;
-      const currentPage = store.currentPage?.page || book.current_page || 1;
-      const totalPages = book.total_pages || 1;
-      const newPage = action === "prev-page" ? Math.max(1, currentPage - 1) : Math.min(totalPages, currentPage + 1);
-      if (newPage === currentPage) return;
-      const body = document.querySelector(".reader-body-v2");
-      if (body) body.classList.add("page-turning");
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      store.currentPage = await api.get(`/api/books/${book.id}/pages/${newPage}`);
-      await api.patch(`/api/books/${book.id}`, { current_page: newPage });
-      render(renderReader());
-      return;
-    }
     if (action === "send-anno") {
       const pi = Number(actionEl?.dataset.pi);
       const input = document.querySelector(`.ph[data-anno-pi="${pi}"]`);
       const content = input?.value?.trim();
       if (!content) return;
-      const book = (store.currentBook?.book || store.currentBook);
+      const book = store.bookData?.book;
+      if (!book) return;
+      const page = store.readerPage;
       await api.post(`/api/books/${book.id}/annotations`, { paragraph_index: pi, content, role: "user" });
-      store.currentPage = await api.get(`/api/books/${book.id}/pages/${store.currentPage.page}`);
-      render(renderReader());
+      store.bookData = await api.get(`/api/books/${book.id}/all`);
+      renderReaderKeepingPage(page);
       return;
     }
     if (action === "toggle-thought") {
@@ -656,22 +716,53 @@ document.addEventListener("click", async (event) => {
       }
     }
     if (action === "discuss-book") {
-      const excerpt = store.currentBook?.chapter?.content?.slice(0, 180) || "";
+      const excerpt = (store.bookData?.paragraphs || []).map((item) => item.content).join("\n").slice(0, 180);
       go("/chat");
       setTimeout(() => sendMessage(`我们聊聊我刚读到的这一段：${excerpt}`, []), 450);
+    }
+    if (action === "show-toc") {
+      toast("目录功能开发中");
+      return;
+    }
+    if (action === "show-annotations") {
+      const data = store.bookData;
+      if (!data) return;
+      const annotations = data.annotations || [];
+      if (!annotations.length) {
+        toast("还没有批注");
+        return;
+      }
+      const userAnnotations = annotations.filter((item) => item.role === "user");
+      if (!userAnnotations.length) {
+        toast("还没有批注");
+        return;
+      }
+      const list = userAnnotations.map((item) =>
+        `<div class="anno-list-item" data-jump-pi="${item.paragraph_index}"><div class="anno-list-content">${esc(item.content)}</div></div>`
+      ).join("");
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) {
+        overlay.innerHTML = `<div class="overlay-scrim" data-action="close-overlay"></div><section class="anno-list-panel"><div class="anno-list-title">我的批注</div>${list}</section>`;
+      }
+      return;
+    }
+    if (action === "chat-about-book") {
+      toast("共读聊天开发中");
+      return;
     }
     const annoCta = event.target.closest(".anno-cta");
     if (annoCta) {
       const annoBlock = event.target.closest(".anno-block");
       const pi = Number(annoBlock?.dataset.pi);
-      const book = (store.currentBook?.book || store.currentBook);
+      const book = store.bookData?.book;
       if (!book || Number.isNaN(pi)) return;
       annoCta.textContent = "澄在想…";
       annoCta.style.pointerEvents = "none";
       try {
+        const page = store.readerPage;
         await api.post(`/api/books/${book.id}/annotations/${pi}/ai-reply`, {});
-        store.currentPage = await api.get(`/api/books/${book.id}/pages/${store.currentPage.page}`);
-        render(renderReader());
+        store.bookData = await api.get(`/api/books/${book.id}/all`);
+        renderReaderKeepingPage(page);
       } catch (err) {
         toast(err.message);
         annoCta.textContent = "让澄也看看 →";
@@ -989,19 +1080,23 @@ document.addEventListener("touchmove", (event) => {
 }, { passive: false });
 
 let _swipeX0 = null;
+let _swipeY0 = null;
 document.addEventListener("touchstart", (event) => {
-  if (route().startsWith("/journal/books/") && route() !== "/journal/books") {
+  if (isReaderPath()) {
     _swipeX0 = event.changedTouches[0].screenX;
+    _swipeY0 = event.changedTouches[0].screenY;
   }
 }, { passive: true });
 
 document.addEventListener("touchend", (event) => {
   if (_swipeX0 === null) return;
   const dx = event.changedTouches[0].screenX - _swipeX0;
+  const dy = event.changedTouches[0].screenY - _swipeY0;
   _swipeX0 = null;
-  if (Math.abs(dx) < 80) return;
-  const btn = document.querySelector(dx > 0 ? '[data-action="prev-page"]' : '[data-action="next-page"]');
-  if (btn && !btn.disabled) btn.click();
+  _swipeY0 = null;
+  if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+  if (dx > 0) goReaderPage(store.readerPage - 1);
+  else goReaderPage(store.readerPage + 1);
 });
 
 navigate();
