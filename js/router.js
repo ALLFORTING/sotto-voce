@@ -589,6 +589,9 @@ document.addEventListener("click", async (event) => {
       const totalPages = book.total_pages || 1;
       const newPage = action === "prev-page" ? Math.max(1, currentPage - 1) : Math.min(totalPages, currentPage + 1);
       if (newPage === currentPage) return;
+      const body = document.querySelector(".reader-body-v2");
+      if (body) body.classList.add("page-turning");
+      await new Promise((resolve) => setTimeout(resolve, 150));
       store.currentPage = await api.get(`/api/books/${book.id}/pages/${newPage}`);
       await api.patch(`/api/books/${book.id}`, { current_page: newPage });
       render(renderReader());

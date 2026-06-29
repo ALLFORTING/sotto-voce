@@ -184,18 +184,19 @@ def split_book_chapters(text):
     ]
 
 
-def split_book_paragraphs(text, chars_per_page=600):
-    """按换行分段，去空段，按字数累计分页"""
+def split_book_paragraphs(text, chars_per_line=21, lines_per_page=20):
+    """按换行分段，按行数估算分页"""
     paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
     page = 1
-    char_count = 0
+    used_lines = 0
     result = []
     for paragraph in paragraphs:
-        if char_count > 0 and char_count + len(paragraph) > chars_per_page:
+        para_lines = -(-len(paragraph) // chars_per_line) + 1
+        if used_lines > 0 and used_lines + para_lines > lines_per_page:
             page += 1
-            char_count = 0
+            used_lines = 0
         result.append((paragraph, page))
-        char_count += len(paragraph)
+        used_lines += para_lines
     total_pages = page if result else 1
     return result, total_pages
 

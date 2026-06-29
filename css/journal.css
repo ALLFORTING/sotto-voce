@@ -803,6 +803,11 @@
   min-height: 0;
   overflow-y: auto;
   padding: 6px 28px 0;
+  transition: opacity 0.15s ease;
+}
+
+.reader-body-v2.page-turning {
+  opacity: 0;
 }
 
 .reader-body-v2 p.normal {
