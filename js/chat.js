@@ -132,6 +132,13 @@ export function renderLongPressMenu() {
         <button class="opt danger" data-conversation-action="delete"><span>删除</span>${icon("trash")}</button>
       </section>`;
   }
+  if (store.longPress.role === "book") {
+    return `<div class="overlay-scrim" data-action="close-overlay"></div>
+      <section class="long-press-menu" style="left:28px;top:138px">
+        <button class="opt" data-book-action="rename"><span>重命名</span>${icon("edit")}</button>
+        <button class="opt danger" data-book-action="delete"><span>删除</span>${icon("trash")}</button>
+      </section>`;
+  }
   const rect = store.longPress.rect || { left: 28, top: 260, bottom: 320, width: 220 };
   const left = store.longPress.role === "assistant"
     ? Math.max(18, rect.left)

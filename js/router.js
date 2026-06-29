@@ -57,6 +57,7 @@ const app = document.querySelector("#app");
 let navigationId = 0;
 let longPressTimer = 0;
 let longPressStart = null;
+let suppressBookCardClick = false;
 
 const CACHE_MS = {
   home: 5 * 60_000,
@@ -448,6 +449,7 @@ function clearLongPress() {
 
 function dismissLongPress() {
   store.longPress = null;
+  suppressBookCardClick = false;
   document.querySelector(".long-press-active")?.classList.remove("long-press-active");
   const overlay = document.querySelector(".phone-overlay-layer");
   if (overlay) overlay.innerHTML = "";
@@ -456,7 +458,8 @@ function dismissLongPress() {
 document.addEventListener("pointerdown", (event) => {
   const message = event.target.closest(".msg-row[data-message-id]");
   const conversation = event.target.closest(".drawer-item");
-  if (!message && !conversation) return;
+  const bookCard = event.target.closest(".cv2-book");
+  if (!message && !conversation && !bookCard) return;
   clearLongPress();
   longPressStart = { x: event.clientX, y: event.clientY };
   longPressTimer = setTimeout(() => {
@@ -474,6 +477,12 @@ document.addEventListener("pointerdown", (event) => {
     }
     if (conversation) {
       store.longPress = { role: "conversation", conversationId: Number(conversation.dataset.conversation) };
+    }
+    if (bookCard) {
+      bookCard.classList.add("long-press-active");
+      const bookId = bookCard.dataset.go?.split("/").pop();
+      store.longPress = { role: "book", bookId: Number(bookId) };
+      suppressBookCardClick = true;
     }
     const overlay = document.querySelector(".phone-overlay-layer");
     if (overlay) {
@@ -499,6 +508,14 @@ document.addEventListener("pointermove", (event) => {
 document.addEventListener("scroll", updateAutoFollow, true);
 
 document.addEventListener("click", async (event) => {
+  if (store.longPress?.role === "book" && suppressBookCardClick && event.target.closest(".cv2-book")) {
+    suppressBookCardClick = false;
+    event.preventDefault();
+    return;
+  }
+  if (store.longPress?.role === "book" && !event.target.closest(".long-press-menu") && !event.target.closest(".overlay-scrim")) {
+    return dismissLongPress();
+  }
   const goTarget = event.target.closest("[data-go]");
   if (goTarget) {
     event.preventDefault();
@@ -769,6 +786,26 @@ document.addEventListener("click", async (event) => {
   if (messageAction) return handleMessageAction(messageAction);
   const conversationAction = event.target.closest("[data-conversation-action]")?.dataset.conversationAction;
   if (conversationAction) return handleConversationAction(conversationAction);
+  const bookAction = event.target.closest("[data-book-action]")?.dataset.bookAction;
+  if (bookAction) {
+    const bookId = store.longPress?.bookId;
+    if (!bookId) return dismissLongPress();
+    if (bookAction === "rename") {
+      const book = (store.books || []).find((item) => item.id === bookId);
+      const title = prompt("重命名", book?.title || "");
+      if (title?.trim()) {
+        await api.patch(`/api/books/${bookId}`, { title: title.trim() });
+        await loadBooks(true);
+      }
+    }
+    if (bookAction === "delete" && confirm("删除这本书？")) {
+      await api.delete(`/api/books/${bookId}`);
+      await loadBooks(true);
+    }
+    dismissLongPress();
+    render(renderShelf());
+    return;
+  }
 });
 
 document.addEventListener("input", (event) => {
@@ -868,7 +905,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("contextmenu", (event) => {
-  if (event.target.closest(".msg-row, .drawer-item")) event.preventDefault();
+  if (event.target.closest(".msg-row, .drawer-item, .cv2-book")) event.preventDefault();
 });
 
 async function handleMessageAction(action) {
@@ -947,5 +984,21 @@ document.addEventListener("touchmove", (event) => {
     event.preventDefault();
   }
 }, { passive: false });
+
+let _swipeX0 = null;
+document.addEventListener("touchstart", (event) => {
+  if (route().startsWith("/journal/books/") && route() !== "/journal/books") {
+    _swipeX0 = event.changedTouches[0].screenX;
+  }
+}, { passive: true });
+
+document.addEventListener("touchend", (event) => {
+  if (_swipeX0 === null) return;
+  const dx = event.changedTouches[0].screenX - _swipeX0;
+  _swipeX0 = null;
+  if (Math.abs(dx) < 80) return;
+  const btn = document.querySelector(dx > 0 ? '[data-action="prev-page"]' : '[data-action="next-page"]');
+  if (btn && !btn.disabled) btn.click();
+});
 
 navigate();

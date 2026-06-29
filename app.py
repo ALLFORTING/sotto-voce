@@ -184,11 +184,20 @@ def split_book_chapters(text):
     ]
 
 
-def split_book_paragraphs(text, per_page=25):
-    """按换行分段，去空段，每 per_page 段一页，返回 (paragraphs_list, total_pages)"""
+def split_book_paragraphs(text, chars_per_page=600):
+    """按换行分段，去空段，按字数累计分页"""
     paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
-    total_pages = max(1, -(-len(paragraphs) // per_page))
-    return paragraphs, total_pages
+    page = 1
+    char_count = 0
+    result = []
+    for paragraph in paragraphs:
+        if char_count > 0 and char_count + len(paragraph) > chars_per_page:
+            page += 1
+            char_count = 0
+        result.append((paragraph, page))
+        char_count += len(paragraph)
+    total_pages = page if result else 1
+    return result, total_pages
 
 
 def book_text(filename):
@@ -826,8 +835,8 @@ def create_book():
             VALUES (?, ?, ?, ?)
             """,
             [
-                (book_id, index, index // 25 + 1, paragraph)
-                for index, paragraph in enumerate(paragraphs)
+                (book_id, index, page_number, paragraph)
+                for index, (paragraph, page_number) in enumerate(paragraphs)
             ],
         )
         result = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
