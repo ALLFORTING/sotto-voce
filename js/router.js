@@ -126,7 +126,6 @@ async function loadBooks(force = false) {
 
 async function loadBook(id) {
   store.bookData = await api.get(`/api/books/${id}/all`);
-  store.readerPage = 0;
 }
 
 async function loadUsage(force = false) {
@@ -270,53 +269,35 @@ function isReaderPath(path = route()) {
 }
 
 function scheduleReaderInit(path = route()) {
-  if (isReaderPath(path)) requestAnimationFrame(() => requestAnimationFrame(() => initReader()));
+  if (isReaderPath(path)) requestAnimationFrame(() => restoreReaderScroll());
 }
 
-function renderReaderKeepingPage(page = store.readerPage) {
-  render(renderReader());
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    initReader();
-    goReaderPage(page);
-  }));
+function currentReaderProgress() {
+  const value = parseFloat(document.querySelector(".reader-pct")?.textContent);
+  return Number.isFinite(value) ? value : Number(store.bookData?.book?.progress || 0);
 }
 
-function initReader() {
+function syncReaderProgress(pct) {
+  const value = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+  document.querySelectorAll(".reader-pct").forEach((el) => { el.textContent = `${value}%`; });
+  const fill = document.querySelector(".reader-fill");
+  const thumb = document.querySelector(".reader-thumb");
+  if (fill) fill.style.width = `${value}%`;
+  if (thumb) thumb.style.left = `${value}%`;
+  if (store.bookData?.book) store.bookData.book.progress = value;
+  return value;
+}
+
+function restoreReaderScroll(progress = Number(store.bookData?.book?.progress || 0)) {
   const body = document.querySelector(".reader-body-v2");
-  const inner = document.querySelector(".reader-inner");
-  if (!body || !inner) return;
-  const pageHeight = body.clientHeight;
-  if (!pageHeight) return;
-  const totalHeight = inner.scrollHeight;
-  const totalPages = Math.max(1, Math.ceil(totalHeight / pageHeight));
-  const book = store.bookData?.book;
-  const savedPct = book?.progress || 0;
-  store.readerPage = Math.round(savedPct / 100 * (totalPages - 1));
-  store.readerTotalPages = totalPages;
-  store.readerPageHeight = pageHeight;
-  goReaderPage(store.readerPage);
+  if (!body) return;
+  const pct = syncReaderProgress(progress);
+  body.scrollTop = Math.max(0, body.scrollHeight - body.clientHeight) * pct / 100;
 }
 
-function goReaderPage(page) {
-  const inner = document.querySelector(".reader-inner");
-  if (!inner) return;
-  const total = store.readerTotalPages || 1;
-  page = Math.max(0, Math.min(page, total - 1));
-  store.readerPage = page;
-  inner.style.transition = "transform 0.25s ease";
-  inner.style.transform = `translateY(-${page * store.readerPageHeight}px)`;
-  const pct = total <= 1 ? 100 : Math.round(page / (total - 1) * 100);
-  const fillEl = document.querySelector(".reader-fill");
-  const thumbEl = document.querySelector(".reader-thumb");
-  document.querySelectorAll(".reader-pct").forEach((el) => { el.textContent = `${pct}%`; });
-  if (fillEl) fillEl.style.width = `${pct}%`;
-  if (thumbEl) thumbEl.style.left = `${pct}%`;
-  if (store.bookData?.book) store.bookData.book.progress = pct;
-  clearTimeout(store._progressTimer);
-  store._progressTimer = setTimeout(() => {
-    const book = store.bookData?.book;
-    if (book) api.post(`/api/books/${book.id}/progress`, { scroll_pct: pct }).catch(console.warn);
-  }, 2000);
+function renderReaderKeepingProgress(progress = currentReaderProgress()) {
+  render(renderReader());
+  requestAnimationFrame(() => restoreReaderScroll(progress));
 }
 
 function handleProgressDrag(event, bar) {
@@ -325,21 +306,10 @@ function handleProgressDrag(event, bar) {
   const rect = bar.getBoundingClientRect();
   const x = touch.clientX - rect.left;
   const pct = Math.max(0, Math.min(100, Math.round((x / rect.width) * 100)));
-  const fill = document.querySelector(".reader-fill");
-  const thumb = document.querySelector(".reader-thumb");
-  if (fill) fill.style.width = `${pct}%`;
-  if (thumb) thumb.style.left = `${pct}%`;
-  document.querySelectorAll(".reader-pct").forEach((el) => { el.textContent = `${pct}%`; });
-  const inner = document.querySelector(".reader-inner");
-  if (inner && store.readerPageHeight) {
-    const totalHeight = inner.scrollHeight;
-    const viewHeight = store.readerPageHeight;
-    const total = store.readerTotalPages || Math.max(1, Math.ceil(totalHeight / viewHeight));
-    const page = Math.max(0, Math.min(total - 1, Math.round(((total - 1) * pct) / 100)));
-    inner.style.transition = "none";
-    inner.style.transform = `translateY(-${page * viewHeight}px)`;
-    store.readerPage = page;
-    if (store.bookData?.book) store.bookData.book.progress = pct;
+  syncReaderProgress(pct);
+  const body = document.querySelector(".reader-body-v2");
+  if (body) {
+    body.scrollTop = Math.max(0, body.scrollHeight - body.clientHeight) * pct / 100;
   }
 }
 
@@ -539,7 +509,9 @@ document.addEventListener("pointerdown", (event) => {
   const message = event.target.closest(".msg-row[data-message-id]");
   const conversation = event.target.closest(".drawer-item");
   const bookCard = event.target.closest(".cv2-book");
-  if (!message && !conversation && !bookCard) return;
+  const annoBlock = event.target.closest(".anno-block");
+  if (annoBlock && event.target.closest(".anno-input, .anno-cta")) return;
+  if (!message && !conversation && !bookCard && !annoBlock) return;
   clearLongPress();
   longPressStart = { x: event.clientX, y: event.clientY };
   longPressTimer = setTimeout(() => {
@@ -564,6 +536,28 @@ document.addEventListener("pointerdown", (event) => {
       store.longPress = { role: "book", bookId: Number(bookId) };
       suppressBookCardClick = true;
     }
+    if (annoBlock) {
+      const pi = annoBlock.dataset.pi;
+      document.querySelectorAll(".anno-block.active").forEach((el) => {
+        el.classList.remove("active");
+        el.querySelectorAll(".anno-cta, .anno-input").forEach((child) => child.remove());
+      });
+      annoBlock.classList.add("active");
+      if (!annoBlock.querySelector(".anno-input")) {
+        const cta = document.createElement("div");
+        cta.className = "anno-cta";
+        cta.textContent = "让澄也看看 →";
+        const inputBox = document.createElement("div");
+        inputBox.className = "anno-input";
+        inputBox.innerHTML = `<input class="ph" placeholder="写点想法…" data-anno-pi="${pi}"><button class="send" data-action="send-anno" data-pi="${pi}">${icon("send")}</button>`;
+        annoBlock.appendChild(cta);
+        annoBlock.appendChild(inputBox);
+        inputBox.querySelector(".ph").focus();
+      }
+      store.longPress = { role: "annotation", pi: Number(pi) };
+      navigator.vibrate?.(15);
+      return;
+    }
     const overlay = document.querySelector(".phone-overlay-layer");
     if (overlay) {
       if (conversation && store.drawerOpen) {
@@ -587,7 +581,29 @@ document.addEventListener("pointermove", (event) => {
 
 document.addEventListener("scroll", updateAutoFollow, true);
 
+document.addEventListener("scroll", () => {
+  const body = document.querySelector(".reader-body-v2");
+  if (!body || !isReaderPath()) return;
+  const pct = body.scrollHeight <= body.clientHeight
+    ? 100
+    : Math.round((body.scrollTop / (body.scrollHeight - body.clientHeight)) * 100);
+  syncReaderProgress(pct);
+  clearTimeout(store._progressTimer);
+  store._progressTimer = setTimeout(() => {
+    const book = store.bookData?.book;
+    if (book) api.post(`/api/books/${book.id}/progress`, { scroll_pct: pct }).catch(console.warn);
+  }, 3000);
+}, true);
+
 document.addEventListener("click", async (event) => {
+  if (document.querySelector(".anno-block.active") && !event.target.closest(".anno-block.active, .anno-input, .anno-cta")) {
+    document.querySelectorAll(".anno-block.active").forEach((el) => {
+      el.classList.remove("active");
+      el.querySelectorAll(".anno-cta, .anno-input").forEach((child) => child.remove());
+    });
+    store.longPress = null;
+    return;
+  }
   if (store.longPress?.role === "book" && suppressBookCardClick && event.target.closest(".cv2-book")) {
     suppressBookCardClick = false;
     event.preventDefault();
@@ -600,9 +616,13 @@ document.addEventListener("click", async (event) => {
   if (jumpPi) {
     const pi = Number(jumpPi.dataset.jumpPi);
     const block = document.querySelector(`.anno-block[data-pi="${pi}"]`);
-    if (block && store.readerPageHeight) {
-      const page = Math.floor(block.offsetTop / store.readerPageHeight);
-      goReaderPage(page);
+    const body = document.querySelector(".reader-body-v2");
+    if (block && body) {
+      body.scrollTop += block.getBoundingClientRect().top - body.getBoundingClientRect().top;
+      const pct = body.scrollHeight <= body.clientHeight
+        ? 100
+        : Math.round((body.scrollTop / (body.scrollHeight - body.clientHeight)) * 100);
+      syncReaderProgress(pct);
     }
     const overlay = document.querySelector(".phone-overlay-layer");
     if (overlay) overlay.innerHTML = "";
@@ -683,10 +703,11 @@ document.addEventListener("click", async (event) => {
       if (!content) return;
       const book = store.bookData?.book;
       if (!book) return;
-      const page = store.readerPage;
+      const progress = currentReaderProgress();
       await api.post(`/api/books/${book.id}/annotations`, { paragraph_index: pi, content, role: "user" });
       store.bookData = await api.get(`/api/books/${book.id}/all`);
-      renderReaderKeepingPage(page);
+      store.longPress = null;
+      renderReaderKeepingProgress(progress);
       return;
     }
     if (action === "toggle-thought") {
@@ -803,41 +824,15 @@ document.addEventListener("click", async (event) => {
       annoCta.textContent = "澄在想…";
       annoCta.style.pointerEvents = "none";
       try {
-        const page = store.readerPage;
+        const progress = currentReaderProgress();
         await api.post(`/api/books/${book.id}/annotations/${pi}/ai-reply`, {});
         store.bookData = await api.get(`/api/books/${book.id}/all`);
-        renderReaderKeepingPage(page);
+        store.longPress = null;
+        renderReaderKeepingProgress(progress);
       } catch (err) {
         toast(err.message);
         annoCta.textContent = "让澄也看看 →";
         annoCta.style.pointerEvents = "";
-      }
-      return;
-    }
-    const annoBlock = event.target.closest(".anno-block");
-    if (annoBlock && route().startsWith("/journal/books/")) {
-      if (event.target.closest(".anno-input")) return;
-      const pi = annoBlock.dataset.pi;
-      const wasActive = annoBlock.classList.contains("active");
-      document.querySelectorAll(".anno-block.active").forEach((el) => {
-        if (el !== annoBlock) el.querySelectorAll(".anno-cta, .anno-input").forEach((child) => child.remove());
-        el.classList.remove("active");
-      });
-      if (!wasActive) {
-        annoBlock.classList.add("active");
-        if (!annoBlock.querySelector(".anno-input")) {
-          const cta = document.createElement("div");
-          cta.className = "anno-cta";
-          cta.textContent = "让澄也看看 →";
-          const inputBox = document.createElement("div");
-          inputBox.className = "anno-input";
-          inputBox.innerHTML = `<input class="ph" placeholder="写点想法…" data-anno-pi="${pi}"><button class="send" data-action="send-anno" data-pi="${pi}">${icon("send")}</button>`;
-          annoBlock.appendChild(cta);
-          annoBlock.appendChild(inputBox);
-          inputBox.querySelector(".ph").focus();
-        }
-      } else {
-        annoBlock.querySelectorAll(".anno-cta, .anno-input").forEach((el) => el.remove());
       }
       return;
     }
@@ -1043,7 +1038,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("contextmenu", (event) => {
-  if (event.target.closest(".msg-row, .drawer-item, .cv2-book")) event.preventDefault();
+  if (event.target.closest(".msg-row, .drawer-item, .cv2-book, .anno-block")) event.preventDefault();
 });
 
 async function handleMessageAction(action) {
@@ -1123,15 +1118,10 @@ document.addEventListener("touchmove", (event) => {
   }
 }, { passive: false });
 
-let _swipeX0 = null;
-let _swipeY0 = null;
-
 document.addEventListener("touchstart", (event) => {
   const bar = event.target.closest(".pbar-touch");
   if (!bar) return;
   store._dragging = true;
-  _swipeX0 = null;
-  _swipeY0 = null;
   handleProgressDrag(event, bar);
 }, { passive: true });
 
@@ -1147,24 +1137,6 @@ document.addEventListener("touchend", () => {
   const book = store.bookData?.book;
   const pct = parseFloat(document.querySelector(".reader-pct")?.textContent) || 0;
   if (book) api.post(`/api/books/${book.id}/progress`, { scroll_pct: pct }).catch(console.warn);
-});
-
-document.addEventListener("touchstart", (event) => {
-  if (isReaderPath() && !event.target.closest(".pbar-touch")) {
-    _swipeX0 = event.changedTouches[0].screenX;
-    _swipeY0 = event.changedTouches[0].screenY;
-  }
-}, { passive: true });
-
-document.addEventListener("touchend", (event) => {
-  if (_swipeX0 === null) return;
-  const dx = event.changedTouches[0].screenX - _swipeX0;
-  const dy = event.changedTouches[0].screenY - _swipeY0;
-  _swipeX0 = null;
-  _swipeY0 = null;
-  if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
-  if (dx > 0) goReaderPage(store.readerPage - 1);
-  else goReaderPage(store.readerPage + 1);
 });
 
 navigate();

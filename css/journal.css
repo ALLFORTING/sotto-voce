@@ -801,13 +801,9 @@
 .reader-body-v2 {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 6px 28px 0;
-  position: relative;
-}
-
-.reader-inner {
-  will-change: transform;
 }
 
 .reader-body-v2 p.normal {

@@ -169,21 +169,19 @@ export function renderReader() {
       <div class="bt">${esc(book.title)}</div>
       <span class="pg reader-pct">${book.progress || 0}%</span>
     </header>
-    <section class="reader-body-v2">
-      <div class="reader-inner">
-        ${paragraphs.map((p) => {
-          const annos = annoMap[p.paragraph_index] || [];
-          if (annos.length) {
-            return `<div class="anno-block" data-pi="${p.paragraph_index}">
-              <p class="anno-para">${esc(p.content)}</p>
-              <div class="anno-bubbles">
-                ${annos.map((a) => `<div class="anno-b ${a.role === 'user' ? 'ting' : 'cheng'}">${esc(a.content)}</div>`).join("")}
-              </div>
-            </div>`;
-          }
-          return `<div class="anno-block" data-pi="${p.paragraph_index}"><p class="normal">${esc(p.content)}</p></div>`;
-        }).join("")}
-      </div>
+    <section class="reader-body-v2 jnl-scroll">
+      ${paragraphs.map((p) => {
+        const annos = annoMap[p.paragraph_index] || [];
+        if (annos.length) {
+          return `<div class="anno-block" data-pi="${p.paragraph_index}">
+            <p class="anno-para">${esc(p.content)}</p>
+            <div class="anno-bubbles">
+              ${annos.map((a) => `<div class="anno-b ${a.role === 'user' ? 'ting' : 'cheng'}">${esc(a.content)}</div>`).join("")}
+            </div>
+          </div>`;
+        }
+        return `<div class="anno-block" data-pi="${p.paragraph_index}"><p class="normal">${esc(p.content)}</p></div>`;
+      }).join("")}
     </section>
     <footer class="reader-foot-v2">
       <div class="reader-progress">
