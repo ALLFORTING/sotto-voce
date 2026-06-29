@@ -187,9 +187,10 @@ export function renderReader() {
     </section>
     <footer class="reader-foot-v2">
       <div class="reader-progress">
-        <span class="reader-page-info">0 / 0</span>
-        <span class="pbar"><span class="fill" style="width:0%"></span></span>
-        <span class="pct">${book.progress || 0}%</span>
+        <span class="pct reader-pct">${book.progress || 0}%</span>
+        <div class="pbar-touch" data-action="progress-drag">
+          <div class="pbar"><div class="fill reader-fill" style="width:${book.progress || 0}%"></div><div class="pbar-thumb reader-thumb"></div></div>
+        </div>
       </div>
       <div class="reader-tools">
         <button class="tool" data-action="show-toc">目录</button>

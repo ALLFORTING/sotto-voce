@@ -886,31 +886,8 @@
 .reader-progress {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 2px 0;
-}
-
-.reader-page-info {
-  font-size: 11px;
-  letter-spacing: 0.3px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-  min-width: 50px;
-}
-
-.reader-progress .pbar {
-  flex: 1;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--bg-sunken);
-}
-
-.reader-progress .pbar .fill {
-  height: 100%;
-  border-radius: 2px;
-  background: var(--text-3);
-  opacity: 0.55;
-  transition: width 0.25s ease;
+  gap: 12px;
+  padding: 4px 0;
 }
 
 .reader-progress .pct {
@@ -919,7 +896,45 @@
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
   min-width: 36px;
-  text-align: right;
+}
+
+.pbar-touch {
+  flex: 1;
+  padding: 12px 0;
+  cursor: pointer;
+}
+
+.pbar-touch .pbar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-sunken);
+  position: relative;
+}
+
+.pbar-touch .pbar .fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--text-3);
+  opacity: 0.55;
+  transition: width 0.1s ease;
+}
+
+.pbar-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.pbar-touch:active .pbar-thumb,
+.pbar-thumb.visible {
+  opacity: 1;
 }
 
 .reader-tools {
@@ -1043,4 +1058,22 @@
   font-size: 13.5px;
   line-height: 1.55;
   color: var(--text-2);
+}
+
+.toc-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.toc-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 14px;
+  letter-spacing: 0.4px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toc-item:active {
+  color: var(--accent);
 }
