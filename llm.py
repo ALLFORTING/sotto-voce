@@ -272,6 +272,16 @@ def load_regeneration_context(message_id):
     }
 
 
+def strip_thinking_text(text: str) -> str:
+    """去除文本中可能残留的 <thinking>...</thinking> 或 <think>...</think> 标签，只保留正式回复内容。"""
+    if not text:
+        return text
+    cleaned = re.sub(
+        r"<(thinking|think)>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE
+    )
+    return cleaned.strip()
+
+
 def short_completion(preset, prompt, max_tokens=100, system=""):
     headers = auth_headers(preset)
     headers["Accept"] = "application/json"
@@ -303,12 +313,15 @@ def short_completion(preset, prompt, max_tokens=100, system=""):
         response.raise_for_status()
         data = response.json()
     if format_name == "anthropic":
-        return "".join(
+        text = "".join(
             block.get("text", "")
             for block in data.get("content", [])
             if block.get("type") == "text"
         )
-    return data["choices"][0]["message"].get("content", "")
+        return strip_thinking_text(text)
+    message = data["choices"][0]["message"]
+    text = message.get("content", "") or ""
+    return strip_thinking_text(text)
 
 
 def plain_text(value, limit):
