@@ -1,9 +1,11 @@
+import base64
 import copy
 import json
 import logging
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
@@ -16,6 +18,10 @@ LOGGER = logging.getLogger(__name__)
 MAX_TOOL_ROUNDS = 15
 DEFAULT_CONTEXT_WINDOW = 200_000
 CACHE_USER_ID = "sotto-voce-stable"
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = (BASE_DIR.parent / "frontend" / "uploads").resolve()
+MAX_IMAGE_ATTACHMENTS = 4
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 
 class ChatSetupError(Exception):
@@ -86,11 +92,16 @@ def mark_cache_breakpoint(message):
     if isinstance(content, str):
         message["content"] = [cached_text_block(content)]
     elif isinstance(content, list) and content:
-        last = content[-1]
-        if isinstance(last, dict):
-            last["cache_control"] = {"type": "ephemeral"}
-        elif isinstance(last, str):
-            content[-1] = cached_text_block(last)
+        for block in reversed(content):
+            if isinstance(block, dict) and block.get("type") == "text":
+                block["cache_control"] = {"type": "ephemeral"}
+                break
+        else:
+            last = content[-1]
+            if isinstance(last, dict):
+                last["cache_control"] = {"type": "ephemeral"}
+            elif isinstance(last, str):
+                content[-1] = cached_text_block(last)
 
 
 def mark_rolling_user_breakpoint(messages):
@@ -110,16 +121,118 @@ def endpoint_url(endpoint, suffix):
     return base + normalized
 
 
+def message_attachments(message):
+    raw = message.get("attachments")
+    if not raw:
+        return []
+    try:
+        items = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, json.JSONDecodeError):
+        LOGGER.warning("Ignoring invalid attachment metadata: %r", raw)
+        return []
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def attachment_upload_path(attachment):
+    raw_path = str(attachment.get("path") or "")
+    prefix = "/uploads/"
+    if not raw_path.startswith(prefix):
+        return None
+    relative = raw_path[len(prefix):].replace("\\", "/")
+    if not relative:
+        return None
+    candidate = (UPLOAD_DIR / relative).resolve()
+    try:
+        candidate.relative_to(UPLOAD_DIR)
+    except ValueError:
+        LOGGER.warning("Ignoring upload outside upload dir: %s", raw_path)
+        return None
+    return candidate
+
+
+def image_attachment_payloads(attachments):
+    payloads = []
+    for attachment in attachments:
+        if attachment.get("type") != "image":
+            continue
+        if len(payloads) >= MAX_IMAGE_ATTACHMENTS:
+            LOGGER.warning("Skipping image attachment because limit is %s", MAX_IMAGE_ATTACHMENTS)
+            break
+        mime_type = str(attachment.get("mime_type") or "")
+        if not mime_type.startswith("image/"):
+            continue
+        path = attachment_upload_path(attachment)
+        if not path or not path.exists():
+            LOGGER.warning("Image attachment file not found: %s", attachment.get("path"))
+            continue
+        size = path.stat().st_size
+        # TODO: add server-side image compression if users start uploading very large photos.
+        if size > MAX_IMAGE_BYTES:
+            LOGGER.warning("Skipping image attachment over %s bytes: %s", MAX_IMAGE_BYTES, path.name)
+            continue
+        payloads.append(
+            {
+                "mime_type": mime_type,
+                "data": base64.b64encode(path.read_bytes()).decode("ascii"),
+            }
+        )
+    return payloads
+
+
 def timestamped(message):
+    attachments = message_attachments(message)
     created_at = message["created_at"]
     try:
         display = created_at[:16].replace("T", " ")
     except (TypeError, IndexError):
         display = created_at
     content = f"[{display}]\n{message['content']}"
-    if message.get("attachments"):
-        content += f"\n[attachments] {message['attachments']}"
+    text_attachments = [item for item in attachments if item.get("type") != "image"]
+    if text_attachments:
+        content += f"\n[attachments] {json.dumps(text_attachments, ensure_ascii=False)}"
     return content
+
+
+def anthropic_content(message):
+    attachments = message_attachments(message)
+    images = image_attachment_payloads(attachments)
+    if not images:
+        return timestamped(message)
+    return [
+        {"type": "text", "text": timestamped(message)},
+        *(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image["mime_type"],
+                    "data": image["data"],
+                },
+            }
+            for image in images
+        ),
+    ]
+
+
+def openai_content(message):
+    attachments = message_attachments(message)
+    images = image_attachment_payloads(attachments)
+    if not images:
+        return timestamped(message)
+    return [
+        {"type": "text", "text": timestamped(message)},
+        *(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{image['mime_type']};base64,{image['data']}"
+                },
+            }
+            for image in images
+        ),
+    ]
 
 
 def load_chat_context(conversation_id, content, attachments):
@@ -448,7 +561,7 @@ def auth_headers(preset):
 
 def anthropic_messages(history):
     return [
-        {"role": item["role"], "content": timestamped(item)}
+        {"role": item["role"], "content": anthropic_content(item)}
         for item in history
     ]
 
@@ -458,7 +571,7 @@ def openai_messages(system, history):
     if system:
         messages.append({"role": "system", "content": system})
     messages.extend(
-        {"role": item["role"], "content": timestamped(item)}
+        {"role": item["role"], "content": openai_content(item)}
         for item in history
     )
     return messages

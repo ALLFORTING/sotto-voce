@@ -203,6 +203,45 @@
   line-height: 1.55;
 }
 
+.msg-attachments {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg-attachment {
+  color: inherit;
+}
+
+.msg-attachment.image {
+  display: block;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.msg-attachment.image img {
+  display: block;
+  max-width: min(240px, 62vw);
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: inherit;
+}
+
+.msg-attachment.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0.9;
+}
+
+.msg-attachment.file svg {
+  width: 14px;
+  height: 14px;
+}
+
 .msg-foot {
   padding: 0 4px;
   color: var(--text-3);

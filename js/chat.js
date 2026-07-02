@@ -56,6 +56,36 @@ function toolsHtml(message) {
   return (message.tools || []).map((tool) => `<span class="tool-tag">${esc(tool)}</span>`).join("");
 }
 
+function messageAttachments(message) {
+  const raw = message.attachments;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function attachmentsHtml(message) {
+  const attachments = messageAttachments(message);
+  if (!attachments.length) return "";
+  const items = attachments.map((item) => {
+    const name = esc(item.name || "附件");
+    const path = esc(item.path || "");
+    if (item.type === "image" && item.path) {
+      return `<a class="msg-attachment image" href="${path}" target="_blank" rel="noopener">
+        <img src="${path}" alt="${name}" loading="lazy">
+      </a>`;
+    }
+    return `<a class="msg-attachment file" href="${path || "#"}" target="_blank" rel="noopener">
+      ${icon("file")}<span>${name}</span>
+    </a>`;
+  }).join("");
+  return `<div class="msg-attachments">${items}</div>`;
+}
+
 export function messageHtml(message, index, messages) {
   const role = message.role === "assistant" ? "ai" : "user";
   const previous = messages[index - 1];
@@ -68,11 +98,12 @@ export function messageHtml(message, index, messages) {
   const messageId = message.id ? ` data-message-id="${message.id}"` : "";
   const messageIndex = ` data-message-index="${index}"`;
   const content = role === "ai" ? aiBubblesHtml(message) : plainText(message.content || "");
+  const attachments = role === "user" ? attachmentsHtml(message) : "";
   return `${showCenterTime && message.created_at ? `<div class="msg-time-center">${formatDate(message.created_at)} ${formatTime(message.created_at)}</div>` : ""}
     <article class="msg-row ${role} ${message.streaming ? "streaming" : ""} ${message.starred ? "starred" : ""}" data-role="${message.role}"${messageId}${streamKey}${messageIndex}>
       ${role === "ai" ? thoughtHtml(message) : ""}
       ${role === "ai" && toolsHtml(message) ? `<div class="tool-tags">${toolsHtml(message)}</div>` : ""}
-      ${role === "ai" ? `<div class="ai-group">${content}</div>` : `<div class="msg-bubble">${content}</div>`}
+      ${role === "ai" ? `<div class="ai-group">${content}</div>` : `<div class="msg-bubble">${content}${attachments}</div>`}
       ${message.created_at ? `<div class="msg-foot">${formatTime(message.created_at)}</div>` : ""}
     </article>`;
 }

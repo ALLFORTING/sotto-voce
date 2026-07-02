@@ -6,7 +6,7 @@ import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, stream_with_context
+from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -30,7 +30,7 @@ from mcp_client import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR.parent / "frontend" / "uploads"
+UPLOAD_DIR = (BASE_DIR.parent / "frontend" / "uploads").resolve()
 BOOK_DIR = BASE_DIR / "data" / "books"
 MONTH_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 BOOK_CHAPTER_PATTERN = re.compile(
@@ -1396,6 +1396,11 @@ def upload():
             "mime_type": file.mimetype,
         }
     ), 201
+
+
+@app.get("/uploads/<path:filename>")
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_DIR, filename)
 
 
 @app.post("/api/chat")
