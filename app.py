@@ -1,10 +1,14 @@
 import json
 import hmac
+import logging
 import os
 import re
 import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger().setLevel(logging.INFO)
 
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 from flask_cors import CORS
