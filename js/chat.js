@@ -86,31 +86,47 @@ function attachmentsHtml(message) {
   return `<div class="msg-attachments">${items}</div>`;
 }
 
-function localDateKey(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function dateParts(value) {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return {
+      year: Number(match[1]),
+      month: Number(match[2]),
+      day: Number(match[3])
+    };
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate()
+  };
 }
 
-function dayStart(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function localDateKey(value) {
+  const parts = dateParts(value);
+  if (!parts) return "";
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function dayStart(parts) {
+  return new Date(parts.year, parts.month - 1, parts.day);
 }
 
 function dateDividerLabel(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const today = dayStart(new Date());
-  const messageDay = dayStart(date);
+  const parts = dateParts(value);
+  const todayParts = dateParts(new Date());
+  if (!parts || !todayParts) return "";
+  const today = dayStart(todayParts);
+  const messageDay = dayStart(parts);
   const diffDays = Math.round((today - messageDay) / 86400000);
   if (diffDays === 0) return "今天";
   if (diffDays === 1) return "昨天";
-  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
-  return date.getFullYear() === today.getFullYear()
+  const monthDay = `${parts.month}月${parts.day}日`;
+  return parts.year === todayParts.year
     ? monthDay
-    : `${date.getFullYear()}年${monthDay}`;
+    : `${parts.year}年${monthDay}`;
 }
 
 function shouldShowDateDivider(message, previous) {
