@@ -23,6 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = (BASE_DIR.parent / "frontend" / "uploads").resolve()
 MAX_IMAGE_ATTACHMENTS = 4
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+CACHE_READ_PRICE_RATIO = 0.1
 
 
 class ChatSetupError(Exception):
@@ -39,6 +40,7 @@ class StreamResult:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    upstream_cost: float = None
     tool_calls: list = field(default_factory=list)
 
 
@@ -78,6 +80,74 @@ def upstream_format(preset):
     if cache_mode(preset) == "or-blocks":
         return "openai"
     return preset["format"]
+
+
+def int_value(value, default=0):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def float_value(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def first_int(mapping, *names):
+    for name in names:
+        if name in mapping and mapping[name] is not None:
+            return int_value(mapping[name])
+    return None
+
+
+def apply_usage_cost(result, usage):
+    if "cost" in usage:
+        cost = float_value(usage.get("cost"))
+        if cost is not None:
+            result.upstream_cost = cost
+
+
+def usage_cost_breakdown(preset, result):
+    input_tokens = int_value(result.input_tokens)
+    output_tokens = int_value(result.output_tokens)
+    cache_read_tokens = int_value(result.cache_read_tokens)
+    cache_write_tokens = int_value(result.cache_write_tokens)
+    input_price = float(preset.get("input_price") or 0)
+    output_price = float(preset.get("output_price") or 0)
+    # OpenRouter/Anthropic cache-read pricing is typically ~10% of fresh input
+    # (e.g. Opus 4.6: $5/M input vs ~$0.5/M cache read). If providers expose
+    # model-specific cache prices later, add a preset field and use it here.
+    cache_read_price = input_price * CACHE_READ_PRICE_RATIO
+    if upstream_format(preset) == "anthropic":
+        # Anthropic usage reports cache reads/writes separately from input_tokens.
+        fresh_input_tokens = input_tokens + cache_write_tokens
+    else:
+        # OpenAI-compatible/OpenRouter prompt_tokens usually include cached
+        # prompt tokens, so subtract cache hits before applying full input price.
+        fresh_input_tokens = max(input_tokens - cache_read_tokens, 0)
+    estimated_cost = (
+        fresh_input_tokens * input_price
+        + cache_read_tokens * cache_read_price
+        + output_tokens * output_price
+    ) / 1_000_000
+    upstream_cost = float_value(result.upstream_cost)
+    cost = upstream_cost if upstream_cost is not None else estimated_cost
+    return {
+        "fresh_input_tokens": fresh_input_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_write_tokens": cache_write_tokens,
+        "output_tokens": output_tokens,
+        "input_price": input_price,
+        "cache_read_price": cache_read_price,
+        "output_price": output_price,
+        "estimated_cost": estimated_cost,
+        "upstream_cost": upstream_cost,
+        "cost_source": "upstream" if upstream_cost is not None else "estimated",
+        "cost": cost,
+    }
 
 
 def cached_text_block(text):
@@ -450,9 +520,7 @@ def record_usage_log(context, result, created_at):
     output_tokens = int(result.output_tokens or 0)
     cache_read_tokens = int(result.cache_read_tokens or 0)
     cache_write_tokens = int(result.cache_write_tokens or 0)
-    input_price = float(preset.get("input_price") or 0)
-    output_price = float(preset.get("output_price") or 0)
-    cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
+    cost = usage_cost_breakdown(preset, result)["cost"]
     with connection() as conn:
         conn.execute(
             """
@@ -707,9 +775,10 @@ def stream_anthropic(response):
             usage = data.get("message", {}).get("usage", {})
             if usage:
                 LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
-            result.input_tokens = int(usage.get("input_tokens", 0))
-            result.cache_read_tokens = int(usage.get("cache_read_input_tokens", 0))
-            result.cache_write_tokens = int(usage.get("cache_creation_input_tokens", 0))
+                apply_usage_cost(result, usage)
+            result.input_tokens = int_value(usage.get("input_tokens"))
+            result.cache_read_tokens = int_value(usage.get("cache_read_input_tokens"))
+            result.cache_write_tokens = int_value(usage.get("cache_creation_input_tokens"))
         elif event_type == "content_block_start":
             index = data.get("index", 0)
             block = data.get("content_block", {})
@@ -765,7 +834,8 @@ def stream_anthropic(response):
             usage = data.get("usage", {}) or {}
             if usage:
                 LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
-            result.output_tokens = int(
+                apply_usage_cost(result, usage)
+            result.output_tokens = int_value(
                 usage.get("output_tokens", result.output_tokens)
             )
     if thinking_started:
@@ -789,12 +859,42 @@ def stream_openai(response):
         usage = data.get("usage") or {}
         if usage:
             LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
-        result.input_tokens = int(usage.get("prompt_tokens", result.input_tokens))
-        result.output_tokens = int(usage.get("completion_tokens", result.output_tokens))
+            apply_usage_cost(result, usage)
+        result.input_tokens = int_value(usage.get("prompt_tokens", result.input_tokens))
+        result.output_tokens = int_value(usage.get("completion_tokens", result.output_tokens))
         details = usage.get("prompt_tokens_details") or {}
-        cached_tokens = details.get("cached_tokens")
+        # Cache usage field names vary across OpenRouter / OpenAI-compatible
+        # providers. Keep the common Anthropic-style names plus OpenAI details.
+        cached_tokens = first_int(
+            usage,
+            "cache_read_input_tokens",
+            "cache_read_tokens",
+            "cached_tokens",
+        )
+        if cached_tokens is None:
+            cached_tokens = first_int(
+                details,
+                "cached_tokens",
+                "cache_read_input_tokens",
+                "cache_read_tokens",
+            )
         if cached_tokens is not None:
-            result.cache_read_tokens = int(cached_tokens)
+            result.cache_read_tokens = cached_tokens
+        cache_write_tokens = first_int(
+            usage,
+            "cache_creation_input_tokens",
+            "cache_write_input_tokens",
+            "cache_write_tokens",
+        )
+        if cache_write_tokens is None:
+            cache_write_tokens = first_int(
+                details,
+                "cache_creation_input_tokens",
+                "cache_creation_tokens",
+                "cache_write_tokens",
+            )
+        if cache_write_tokens is not None:
+            result.cache_write_tokens = cache_write_tokens
         if usage and usage.get("prompt_tokens"):
             LOGGER.debug("openai usage: %s", json.dumps(usage, default=str))
         choices = data.get("choices") or []
@@ -931,6 +1031,10 @@ def chat_events(context):
                 final_result.output_tokens += current.output_tokens
                 final_result.cache_read_tokens += current.cache_read_tokens
                 final_result.cache_write_tokens += current.cache_write_tokens
+                if current.upstream_cost is not None:
+                    final_result.upstream_cost = (
+                        float_value(final_result.upstream_cost) or 0
+                    ) + current.upstream_cost
                 if not current.tool_calls:
                     break
                 if round_number >= MAX_TOOL_ROUNDS:
@@ -974,6 +1078,7 @@ def chat_events(context):
             )
             message_id = cursor.lastrowid
         window = context_window(preset["model"])
+        cost_breakdown = usage_cost_breakdown(preset, final_result)
         yield sse(
             "done",
             {
@@ -981,8 +1086,16 @@ def chat_events(context):
                 "usage": {
                     "input_tokens": final_result.input_tokens,
                     "output_tokens": final_result.output_tokens,
+                    "fresh_input_tokens": cost_breakdown["fresh_input_tokens"],
                     "cache_read_tokens": final_result.cache_read_tokens,
                     "cache_write_tokens": final_result.cache_write_tokens,
+                    "input_price": cost_breakdown["input_price"],
+                    "cache_read_price": cost_breakdown["cache_read_price"],
+                    "output_price": cost_breakdown["output_price"],
+                    "estimated_cost": cost_breakdown["estimated_cost"],
+                    "upstream_cost": cost_breakdown["upstream_cost"],
+                    "cost_source": cost_breakdown["cost_source"],
+                    "cost": cost_breakdown["cost"],
                     "context_pct": round(final_result.input_tokens / window, 6),
                 },
             },
