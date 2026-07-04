@@ -122,6 +122,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.msg-date-divider {
+  align-self: center;
+  margin: 8px 0 2px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 .msg-row {
   max-width: 78%;
   display: flex;

@@ -1,4 +1,4 @@
-import { chatTop, esc, formatDate, formatTime, icon, phone, plainText, relativeTime } from "./components.js";
+import { chatTop, esc, formatTime, icon, phone, plainText, relativeTime } from "./components.js";
 import { store } from "./store.js";
 
 function aiBubbleTexts(value = "") {
@@ -86,20 +86,50 @@ function attachmentsHtml(message) {
   return `<div class="msg-attachments">${items}</div>`;
 }
 
+function localDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dayStart(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dateDividerLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = dayStart(new Date());
+  const messageDay = dayStart(date);
+  const diffDays = Math.round((today - messageDay) / 86400000);
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+  return date.getFullYear() === today.getFullYear()
+    ? monthDay
+    : `${date.getFullYear()}年${monthDay}`;
+}
+
+function shouldShowDateDivider(message, previous) {
+  if (!message.created_at) return false;
+  return !previous?.created_at || localDateKey(message.created_at) !== localDateKey(previous.created_at);
+}
+
 export function messageHtml(message, index, messages) {
   const role = message.role === "assistant" ? "ai" : "user";
   const previous = messages[index - 1];
-  const showCenterTime = index === 0 || (
-    message.created_at &&
-    previous?.created_at &&
-    new Date(message.created_at).toDateString() !== new Date(previous.created_at).toDateString()
-  );
+  const dateDivider = shouldShowDateDivider(message, previous)
+    ? `<div class="msg-date-divider">${dateDividerLabel(message.created_at)}</div>`
+    : "";
   const streamKey = message.streamKey ? ` data-stream-key="${esc(message.streamKey)}"` : "";
   const messageId = message.id ? ` data-message-id="${message.id}"` : "";
   const messageIndex = ` data-message-index="${index}"`;
   const content = role === "ai" ? aiBubblesHtml(message) : plainText(message.content || "");
   const attachments = role === "user" ? attachmentsHtml(message) : "";
-  return `${showCenterTime && message.created_at ? `<div class="msg-time-center">${formatDate(message.created_at)} ${formatTime(message.created_at)}</div>` : ""}
+  return `${dateDivider}
     <article class="msg-row ${role} ${message.streaming ? "streaming" : ""} ${message.starred ? "starred" : ""}" data-role="${message.role}"${messageId}${streamKey}${messageIndex}>
       ${role === "ai" ? thoughtHtml(message) : ""}
       ${role === "ai" && toolsHtml(message) ? `<div class="tool-tags">${toolsHtml(message)}</div>` : ""}
