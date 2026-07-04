@@ -15,6 +15,7 @@ from mcp_client import call_tool, get_tools, get_tool_server_name
 
 
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.INFO)
 MAX_TOOL_ROUNDS = 15
 DEFAULT_CONTEXT_WINDOW = 200_000
 CACHE_USER_ID = "sotto-voce-stable"
@@ -704,6 +705,8 @@ def stream_anthropic(response):
             raise RuntimeError(detail.get("message") or "Anthropic upstream error.")
         if event_type == "message_start":
             usage = data.get("message", {}).get("usage", {})
+            if usage:
+                LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
             result.input_tokens = int(usage.get("input_tokens", 0))
             result.cache_read_tokens = int(usage.get("cache_read_input_tokens", 0))
             result.cache_write_tokens = int(usage.get("cache_creation_input_tokens", 0))
@@ -759,8 +762,11 @@ def stream_anthropic(response):
                 result.thinking += f"\n[mcp:{_server}.{call['name']}]\n"
                 yield "tool_use", {"name": call["name"], "input": tool_input}, result
         elif event_type == "message_delta":
+            usage = data.get("usage", {}) or {}
+            if usage:
+                LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
             result.output_tokens = int(
-                data.get("usage", {}).get("output_tokens", result.output_tokens)
+                usage.get("output_tokens", result.output_tokens)
             )
     if thinking_started:
         seconds = round(time.monotonic() - thinking_started_at, 2)
@@ -781,6 +787,8 @@ def stream_openai(response):
                 else str(detail)
             )
         usage = data.get("usage") or {}
+        if usage:
+            LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
         result.input_tokens = int(usage.get("prompt_tokens", result.input_tokens))
         result.output_tokens = int(usage.get("completion_tokens", result.output_tokens))
         details = usage.get("prompt_tokens_details") or {}
