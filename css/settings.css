@@ -176,6 +176,95 @@
   font-weight: 600;
 }
 
+.export-form {
+  padding: 8px 20px 28px;
+}
+
+.export-section {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.export-choice {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.export-choice.disabled {
+  opacity: 0.45;
+}
+
+.export-choice input {
+  accent-color: var(--accent);
+}
+
+.export-hint {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.export-select {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.export-date-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.export-date-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+
+.export-date-grid input {
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.export-actions {
+  padding-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+
+.export-actions button {
+  flex: 1;
+}
+
+.export-actions .secondary {
+  min-height: 44px;
+  border-radius: 22px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
 .prompt-block {
   margin: 16px 22px 0;
 }

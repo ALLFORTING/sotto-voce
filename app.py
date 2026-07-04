@@ -115,6 +115,308 @@ def month_range(month):
     return start.isoformat(), end.isoformat()
 
 
+def parse_timestamp(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if parsed.tzinfo:
+        return parsed.astimezone(CHINA_TZ)
+    return parsed.replace(tzinfo=CHINA_TZ)
+
+
+def export_date_key(value):
+    parsed = parse_timestamp(value)
+    if parsed:
+        return parsed.date().isoformat()
+    match = re.match(r"^(\d{4}-\d{2}-\d{2})", str(value or ""))
+    return match.group(1) if match else ""
+
+
+def export_date_label(value):
+    key = export_date_key(value)
+    if not key:
+        return ""
+    try:
+        day = date.fromisoformat(key)
+    except ValueError:
+        return key
+    today = today_china()
+    if day == today:
+        return "今天"
+    if day == today - timedelta(days=1):
+        return "昨天"
+    month_day = f"{day.month}月{day.day}日"
+    return month_day if day.year == today.year else f"{day.year}年{month_day}"
+
+
+def export_timestamp(value):
+    parsed = parse_timestamp(value)
+    if parsed:
+        return parsed.strftime("%Y-%m-%d %H:%M")
+    return str(value or "")[:16].replace("T", " ")
+
+
+def export_range_bounds(data):
+    date_range = str(data.get("date_range") or "all").strip()
+    if date_range not in {"all", "7d", "30d", "custom"}:
+        raise ValueError("date_range must be all, 7d, 30d, or custom.")
+    if date_range == "all":
+        return date_range, None, None
+    today = today_china()
+    if date_range == "7d":
+        start_day = today - timedelta(days=6)
+        end_day = today
+    elif date_range == "30d":
+        start_day = today - timedelta(days=29)
+        end_day = today
+    else:
+        start_day = parse_iso_day(data.get("start_date"), "start_date")
+        end_day = parse_iso_day(data.get("end_date"), "end_date")
+        if start_day > end_day:
+            raise ValueError("start_date cannot be later than end_date.")
+    start = datetime.combine(start_day, datetime.min.time(), tzinfo=CHINA_TZ)
+    end = datetime.combine(end_day + timedelta(days=1), datetime.min.time(), tzinfo=CHINA_TZ)
+    return date_range, start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")
+
+
+def append_date_filter(sql, values, column, start_at, end_at):
+    if start_at:
+        sql += f" AND {column} >= ?"
+        values.append(start_at)
+    if end_at:
+        sql += f" AND {column} < ?"
+        values.append(end_at)
+    return sql, values
+
+
+def attachment_placeholders(raw):
+    if not raw:
+        return []
+    try:
+        attachments = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(attachments, list):
+        return []
+    placeholders = []
+    for item in attachments:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "")
+        name = str(item.get("name") or Path(path).name or "附件")
+        is_image = item.get("type") == "image" or str(item.get("mime_type") or "").startswith("image/")
+        placeholders.append(f"[{'图片' if is_image else '附件'}: {name}]")
+    return placeholders
+
+
+def normalize_export_options(data):
+    scope = str(data.get("scope") or "current").strip()
+    if scope not in {"current", "all"}:
+        raise ValueError("scope must be current or all.")
+    fmt = str(data.get("format") or "md").strip().lower()
+    if fmt not in {"md", "txt"}:
+        raise ValueError("format must be md or txt.")
+    raw_types = data.get("content_types") or []
+    if not isinstance(raw_types, list):
+        raise ValueError("content_types must be an array.")
+    content_types = []
+    for item in raw_types:
+        value = str(item).strip()
+        if value not in {"chat", "annotations"}:
+            raise ValueError("content_types may only include chat or annotations.")
+        if value not in content_types:
+            content_types.append(value)
+    if not content_types:
+        raise ValueError("Choose at least one content type.")
+    conversation_id = None
+    if "chat" in content_types and scope == "current":
+        try:
+            conversation_id = int(data.get("conversation_id"))
+        except (TypeError, ValueError) as error:
+            raise ValueError("conversation_id is required when exporting current chat.") from error
+    date_range, start_at, end_at = export_range_bounds(data)
+    return {
+        "scope": scope,
+        "conversation_id": conversation_id,
+        "content_types": content_types,
+        "date_range": date_range,
+        "start_at": start_at,
+        "end_at": end_at,
+        "format": fmt,
+    }
+
+
+def load_export_chats(conn, options):
+    if "chat" not in options["content_types"]:
+        return []
+    conversations = []
+    if options["scope"] == "current":
+        conversation = row_or_none(
+            conn,
+            "SELECT * FROM conversations WHERE id = ?",
+            (options["conversation_id"],),
+        )
+        if not conversation:
+            raise LookupError("Conversation")
+        conversations = [conversation]
+    else:
+        conversations = rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM conversations ORDER BY created_at, id"
+            ).fetchall()
+        )
+    results = []
+    for conversation in conversations:
+        sql = """
+            SELECT * FROM messages
+            WHERE conversation_id = ? AND deleted = 0
+        """
+        values = [conversation["id"]]
+        sql, values = append_date_filter(
+            sql, values, "created_at", options["start_at"], options["end_at"]
+        )
+        sql += " ORDER BY created_at, id"
+        messages = rows_to_dicts(conn.execute(sql, values).fetchall())
+        if messages:
+            results.append({"conversation": conversation, "messages": messages})
+    return results
+
+
+def load_export_annotations(conn, options):
+    if "annotations" not in options["content_types"]:
+        return []
+    sql = """
+        SELECT
+            b.id AS book_id,
+            b.title AS book_title,
+            a.paragraph_index,
+            p.content AS paragraph_content,
+            a.role,
+            a.content,
+            a.created_at
+        FROM book_annotations a
+        JOIN books b ON b.id = a.book_id
+        LEFT JOIN book_paragraphs p
+            ON p.book_id = a.book_id AND p.paragraph_index = a.paragraph_index
+        WHERE 1 = 1
+    """
+    values = []
+    sql, values = append_date_filter(
+        sql, values, "a.created_at", options["start_at"], options["end_at"]
+    )
+    sql += " ORDER BY b.id, a.paragraph_index, a.created_at, a.id"
+    return rows_to_dicts(conn.execute(sql, values).fetchall())
+
+
+def render_chat_export(chat_groups, fmt):
+    lines = []
+    for group in chat_groups:
+        conversation = group["conversation"]
+        messages = group["messages"]
+        title = conversation.get("title") or f"对话 {conversation.get('id')}"
+        if fmt == "md":
+            lines.extend([
+                f"## {title}",
+                "",
+                f"- 创建：{export_timestamp(conversation.get('created_at'))}",
+                f"- 更新：{export_timestamp(conversation.get('updated_at'))}",
+                "",
+            ])
+        else:
+            lines.extend([
+                f"=== {title} ===",
+                f"创建：{export_timestamp(conversation.get('created_at'))}",
+                f"更新：{export_timestamp(conversation.get('updated_at'))}",
+                "",
+            ])
+        previous_key = None
+        for message in messages:
+            key = export_date_key(message.get("created_at"))
+            if key != previous_key:
+                if previous_key:
+                    lines.extend(["", "---" if fmt == "md" else "-" * 24, ""])
+                label = export_date_label(message.get("created_at"))
+                if fmt == "md":
+                    lines.extend([f"### {label}", ""])
+                else:
+                    lines.extend([f"----- {label} -----", ""])
+                previous_key = key
+            role = "AI" if message.get("role") == "assistant" else "用户"
+            timestamp = export_timestamp(message.get("created_at"))
+            if fmt == "md":
+                lines.append(f"**{role}** · {timestamp}")
+            else:
+                lines.append(f"{role} · {timestamp}")
+            content = str(message.get("content") or "").strip()
+            if content:
+                lines.extend(["", content])
+            placeholders = attachment_placeholders(message.get("attachments"))
+            if placeholders:
+                lines.extend(["", *placeholders])
+            lines.append("")
+        lines.append("")
+    return lines
+
+
+def render_annotations_export(rows, fmt):
+    if not rows:
+        return []
+    lines = []
+    current_book = None
+    current_paragraph = None
+    for row in rows:
+        book_id = row.get("book_id")
+        paragraph_index = row.get("paragraph_index")
+        if book_id != current_book:
+            if lines:
+                lines.append("")
+            title = row.get("book_title") or f"书籍 {book_id}"
+            lines.extend([f"## 《{title}》" if fmt == "md" else f"=== 《{title}》 ===", ""])
+            current_book = book_id
+            current_paragraph = None
+        if paragraph_index != current_paragraph:
+            heading = f"段落 {int(paragraph_index or 0) + 1}"
+            paragraph = str(row.get("paragraph_content") or "").strip()
+            if fmt == "md":
+                lines.extend([f"### {heading}", "", paragraph, ""])
+            else:
+                lines.extend([f"-- {heading} --", paragraph, ""])
+            current_paragraph = paragraph_index
+        role = "AI回复" if row.get("role") == "ai" else "用户批注"
+        timestamp = export_timestamp(row.get("created_at"))
+        if fmt == "md":
+            lines.append(f"**{role}** · {timestamp}")
+        else:
+            lines.append(f"{role} · {timestamp}")
+        lines.extend(["", str(row.get("content") or "").strip(), ""])
+    return lines
+
+
+def render_export_file(options, chat_groups, annotation_rows):
+    fmt = options["format"]
+    lines = [
+        "# 澄 - 对话导出" if fmt == "md" else "澄 - 对话导出",
+        "",
+        f"导出时间：{export_timestamp(now_iso())}",
+        f"范围：{options['date_range']}",
+        "",
+    ]
+    if "chat" in options["content_types"]:
+        chat_lines = render_chat_export(chat_groups, fmt)
+        if chat_lines:
+            lines.extend(["# 聊天记录" if fmt == "md" else "聊天记录", "", *chat_lines])
+    if "annotations" in options["content_types"]:
+        annotation_lines = render_annotations_export(annotation_rows, fmt)
+        if annotation_lines:
+            lines.extend(["# 伴读批注" if fmt == "md" else "伴读批注", "", *annotation_lines])
+    if len(lines) <= 5:
+        lines.append("没有符合条件的导出内容。")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def checkin_streak(conn):
     dates = {
         row["date"]
@@ -1106,6 +1408,32 @@ def delete_book(book_id):
     except OSError:
         app.logger.exception("Failed to delete book file")
     return jsonify({"deleted": True, "id": book_id})
+
+
+@app.post("/api/export")
+def export_data():
+    try:
+        options = normalize_export_options(payload())
+    except ValueError as error:
+        return bad_request(str(error))
+    try:
+        with connection() as conn:
+            chat_groups = load_export_chats(conn, options)
+            annotation_rows = load_export_annotations(conn, options)
+    except LookupError:
+        return not_found("Conversation")
+    content = render_export_file(options, chat_groups, annotation_rows)
+    timestamp = datetime.now(CHINA_TZ).strftime("%Y%m%d-%H%M%S")
+    filename = (
+        f"cheng-export-{options['scope']}-{options['date_range']}-"
+        f"{timestamp}.{options['format']}"
+    )
+    content_type = "text/markdown; charset=utf-8" if options["format"] == "md" else "text/plain; charset=utf-8"
+    return Response(
+        content,
+        content_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.get("/api/usage/summary")

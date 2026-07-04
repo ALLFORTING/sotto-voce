@@ -47,6 +47,7 @@ import { renderMemory } from "./memory.js";
 import {
   renderAnniversaries,
   renderApiSettings,
+  renderExportSettings,
   renderMcpSettings,
   renderPrompt,
   renderSettings,
@@ -259,6 +260,7 @@ function renderRoute(path) {
   if (path === "/settings/api") return renderApiSettings();
   if (path === "/settings/mcp") return renderMcpSettings();
   if (path === "/settings/terminal") return renderTerminal();
+  if (path === "/settings/export") return renderExportSettings();
   if (path === "/settings/anniv") return renderAnniversaries();
   if (path === "/chat/search") return renderSearchPage();
   return renderHome();
@@ -695,6 +697,28 @@ document.addEventListener("click", async (event) => {
       store.terminalHistory.unshift(result);
       store.terminalHistory = store.terminalHistory.slice(0, 50);
       return render(renderTerminal());
+    }
+    if (action === "export-data") {
+      const form = document.querySelector("#export-form");
+      if (!form) return;
+      const data = formValue(form);
+      const contentTypes = [...form.querySelectorAll('input[name="content_types"]:checked')]
+        .map((item) => item.value);
+      if (!contentTypes.length) {
+        toast("请选择要导出的内容");
+        return;
+      }
+      await api.downloadExport({
+        scope: data.scope || "current",
+        conversation_id: Number(data.conversation_id || store.conversationId || 0) || null,
+        content_types: contentTypes,
+        date_range: data.date_range || "all",
+        start_date: data.start_date || "",
+        end_date: data.end_date || "",
+        format: actionEl?.dataset.format || "md"
+      });
+      toast("导出已开始");
+      return;
     }
     if (action === "send-anno") {
       const pi = Number(actionEl?.dataset.pi);

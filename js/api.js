@@ -35,6 +35,34 @@ export const api = {
   post: (path, data) => request(path, { method: "POST", body: JSON.stringify(data) }),
   patch: (path, data) => request(path, { method: "PATCH", body: JSON.stringify(data) }),
   delete: (path) => request(path, { method: "DELETE" }),
+  async downloadExport(data) {
+    const response = await fetch("/api/export", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(data)
+    });
+    if (response.status === 401) {
+      clearToken();
+      window.dispatchEvent(new CustomEvent("cheng:unauthorized"));
+      throw new Error("访问令牌无效，请重新输入。");
+    }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || error.error || `导出失败：${response.status}`);
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const filename = decodeURIComponent(match?.[1] || match?.[2] || "cheng-export.md");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  },
   upload(file) {
     const body = new FormData();
     body.append("file", file);
