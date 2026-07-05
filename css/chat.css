@@ -171,6 +171,7 @@
 
 .btext {
   display: inline;
+  font-size: 12.5px;
 }
 
 .msg-row.streaming .btext {
@@ -365,7 +366,7 @@
 
 .ttext {
   color: var(--text-2);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.55;
   letter-spacing: 0.2px;
   white-space: pre-wrap;
@@ -398,7 +399,7 @@
 
 .tstep.done .ttext {
   color: var(--done, var(--accent));
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .tool-tags {
@@ -465,12 +466,13 @@
   border-radius: 19px;
   background: var(--bg-sunken);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 12.5px;
   line-height: 20px;
 }
 
 .composer textarea::placeholder {
   color: var(--text-3);
+  font-size: 12.5px;
 }
 
 .pending-attachments {
