@@ -514,6 +514,31 @@ def plain_text(value, limit):
     return text[:limit].rstrip("，。；、 ")
 
 
+def natural_summary_text(value, limit=60):
+    text = re.sub(r"[#*_`>\[\]()~|]", "", str(value))
+    text = re.sub(r"\s+", " ", text).strip().strip("\"'“”‘’")
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].strip()
+    hard_punct = "。！？!?；;"
+    soft_punct = "，,、"
+    min_pos = max(12, limit // 2)
+    hard_pos = max(cut.rfind(char) for char in hard_punct)
+    if hard_pos >= min_pos:
+        return cut[: hard_pos + 1].strip()
+    soft_pos = max(cut.rfind(char) for char in soft_punct)
+    if soft_pos >= min_pos:
+        return cut[: soft_pos + 1].strip() + "…"
+    return cut.rstrip("，,、；;。.!！?？ ") + "…"
+
+
+def summary_looks_hard_cut(value, limit=60):
+    text = str(value or "").strip()
+    if len(text) < limit - 3:
+        return False
+    return not text.endswith(("。", "！", "？", "!", "?", "…"))
+
+
 def record_usage_log(context, result, created_at):
     preset = context["preset"]
     input_tokens = int(result.input_tokens or 0)
@@ -563,6 +588,7 @@ def generate_home_summary(conversation_id):
         if (
             conversation["summary"]
             and conversation["summary_message_id"] == conversation["latest_message_id"]
+            and not summary_looks_hard_cut(conversation["summary"], 60)
         ):
             return conversation["summary"]
         preset = conn.execute(
@@ -586,7 +612,7 @@ def generate_home_summary(conversation_id):
         "把下面最近一段对话概括成不超过60个中文字符的一句纯文本。"
         "只写聊到的事情，不要标题、引号、Markdown符号或解释。\n" + transcript
     )
-    summary = plain_text(short_completion(dict(preset), prompt, 150), 60)
+    summary = natural_summary_text(short_completion(dict(preset), prompt, 150), 60)
     if summary:
         with connection() as conn:
             conn.execute(

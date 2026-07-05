@@ -11,6 +11,14 @@ const readJson = (key, fallback) => {
 
 export const themes = ["light", "dark", "frost", "pearl", "academy", "gothic"];
 const savedTheme = localStorage.getItem("cheng_theme_v2") || localStorage.getItem("cheng_theme") || "light";
+const themeBackgrounds = {
+  light: "#FBF8F3",
+  dark: "#2A2421",
+  frost: "#FAFCFF",
+  pearl: "#FDFCFE",
+  academy: "#1A1C16",
+  gothic: "#17161C"
+};
 const todayChina = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
 const thisMonthChina = () => todayChina().slice(0, 7);
 
@@ -85,11 +93,12 @@ export function setTheme(theme) {
 }
 
 export function updateThemeMeta() {
+  const theme = resolvedTheme();
+  const bg = themeBackgrounds[theme] || themeBackgrounds.light;
+  document.documentElement.style.setProperty("--app-bg", bg);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) return;
-  meta.content = ["dark", "academy", "gothic"].includes(resolvedTheme())
-    ? "#2A2421"
-    : "#FBF8F3";
+  meta.content = bg;
 }
 
 export function setToken(token) {

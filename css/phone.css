@@ -2,12 +2,21 @@
   box-sizing: border-box;
 }
 
+:root {
+  --app-bg: #FBF8F3;
+}
+
+html,
+body {
+  background: var(--app-bg);
+  transition: background-color 250ms ease;
+}
+
 html,
 body {
   width: 100%;
   min-height: 100%;
   margin: 0;
-  background: #111;
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "kern", "liga", "ss01";
@@ -515,7 +524,7 @@ svg {
 
 @media (max-width: 430px), (max-height: 880px) {
   body {
-    background: var(--bg, #FBF8F3);
+    background: var(--app-bg);
   }
 
   #app {

@@ -3,7 +3,10 @@
 }
 
 .settings-group .group-label {
-  padding: 0 28px 8px;
+  padding: 0 24px 8px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
 }
 
 .settings-row {

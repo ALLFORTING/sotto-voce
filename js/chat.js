@@ -236,7 +236,7 @@ function composerHtml() {
   return `<form class="composer" id="composer">
     ${attachments ? `<div class="pending-attachments">${attachments}</div>` : ""}
     <div class="row-input">
-      <button class="plus ${store.plusOpen ? "open" : ""}" type="button" data-action="plus">${icon("plus")}</button>
+      <button class="plus ${store.plusOpen ? "open" : ""}" type="button" data-action="plus">${icon("paperclip")}</button>
       <textarea name="content" rows="1" placeholder="说点什么…">${esc(store.chatDraft)}</textarea>
       <button class="clock" type="button" title="搜索聊天" data-go="/chat/search">${icon("clock")}</button>
       <button class="send" type="submit" ${store.chatDraft.trim() || attachments ? "" : "disabled"}>${icon("send")}</button>

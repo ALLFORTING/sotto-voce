@@ -3,14 +3,18 @@
 }
 
 .chat-top {
-  position: relative;
-  z-index: 5;
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 40px;
   padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  background: transparent;
+  pointer-events: none;
   flex-shrink: 0;
 }
 
@@ -20,6 +24,7 @@
   border-radius: 19px;
   color: var(--text-2);
   font-size: 21px;
+  pointer-events: auto;
 }
 
 .chat-top .icon-btn:active {
@@ -73,22 +78,22 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: 14px 18px 8px;
+  padding: 82px 18px 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.18) 22px, rgb(0 0 0 / 0.72) 52px, #000 82px, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.18) 22px, rgb(0 0 0 / 0.72) 52px, #000 82px, #000 100%);
 }
 
 .chat-empty {
   flex: 1;
   display: grid;
   place-items: center;
-  padding: 0 48px;
+  padding: 40px 48px 0;
   color: var(--text-3);
   font-size: 13px;
   line-height: 1.8;
