@@ -233,12 +233,18 @@ function composerHtml() {
   const attachments = store.pendingAttachments.map((item, index) =>
     `<button class="attachment-chip" type="button" data-remove-attachment="${index}">${esc(item.name)} ×</button>`
   ).join("");
+  const contextPct = Number(store.contextPct || 0);
+  const contextHint = contextPct >= 0.8
+    ? `<span class="context-hint">${Math.round(contextPct * 100)}%</span>`
+    : "";
   return `<form class="composer" id="composer">
     ${attachments ? `<div class="pending-attachments">${attachments}</div>` : ""}
     <div class="row-input">
       <button class="plus ${store.plusOpen ? "open" : ""}" type="button" data-action="plus">${icon("paperclip")}</button>
-      <textarea name="content" rows="1" placeholder="说点什么…">${esc(store.chatDraft)}</textarea>
-      <button class="clock" type="button" title="搜索聊天" data-go="/chat/search">${icon("clock")}</button>
+      <div class="textarea-wrap">
+        <textarea name="content" rows="1" placeholder="说点什么…">${esc(store.chatDraft)}</textarea>
+        ${contextHint}
+      </div>
       <button class="send" type="submit" ${store.chatDraft.trim() || attachments ? "" : "disabled"}>${icon("send")}</button>
     </div>
   </form>`;
