@@ -528,7 +528,7 @@ def natural_summary_text(value, limit=60):
         return cut[: hard_pos + 1].strip()
     soft_pos = max(cut.rfind(char) for char in soft_punct)
     if soft_pos >= min_pos:
-        return cut[: soft_pos + 1].strip() + "…"
+        return cut[:soft_pos].rstrip("，,、；;：: ") + "…"
     return cut.rstrip("，,、；;。.!！?？ ") + "…"
 
 

@@ -14,6 +14,7 @@ import {
   cacheFresh,
   cacheMessages,
   clearToken,
+  invalidateHomeCache,
   rememberConversation,
   saveArchiveCache,
   saveConversationsCache,
@@ -425,6 +426,7 @@ async function sendMessage(content, attachments = [], options = {}) {
     updateStreamMeta(assistant, true);
     await loadConversations(true);
     await loadMessages(true);
+    invalidateHomeCache();
   };
   const drain = () => {
     pending.frame = 0;

@@ -69,7 +69,7 @@ function summaryForDisplay(value, limit = 52) {
   const hardPos = Math.max(...[...hardPunct].map((char) => cut.lastIndexOf(char)));
   if (hardPos >= minPos) return cut.slice(0, hardPos + 1).trim();
   const softPos = Math.max(...[...softPunct].map((char) => cut.lastIndexOf(char)));
-  if (softPos >= minPos) return `${cut.slice(0, softPos + 1).trim()}…`;
+  if (softPos >= minPos) return `${cut.slice(0, softPos).replace(/[，,、；;：:\s]+$/, "")}…`;
   return `${cut.replace(/[，,、；;：:。！？!?\s]+$/, "")}…`;
 }
 

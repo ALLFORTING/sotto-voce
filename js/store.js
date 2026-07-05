@@ -133,6 +133,13 @@ export function saveHomeCache(data) {
   localStorage.setItem("cheng_home_v2_at", String(store.cacheAt.home));
 }
 
+export function invalidateHomeCache() {
+  store.home = null;
+  store.cacheAt.home = 0;
+  localStorage.removeItem("cheng_home_v2");
+  localStorage.removeItem("cheng_home_v2_at");
+}
+
 export function saveConversationsCache(data) {
   store.conversations = data;
   store.cacheAt.conversations = Date.now();
