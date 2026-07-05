@@ -1,4 +1,4 @@
-export const VERSION = "cheng-v126";
+export const VERSION = "cheng-v127";
 
 const readJson = (key, fallback) => {
   try {

@@ -1150,6 +1150,14 @@ async function handleConversationAction(action) {
 window.addEventListener("hashchange", navigate);
 window.addEventListener("cheng:unauthorized", () => render(tokenGate("令牌已失效，请重新输入。")));
 
+window.__setContextPct = (value) => {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return store.contextPct;
+  store.contextPct = Math.max(0, Math.min(1, raw > 1 ? raw / 100 : raw));
+  if (route() === "/chat") render(renderChat());
+  return store.contextPct;
+};
+
 updateThemeMeta();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register(`/sw.js?v=${VERSION}`).catch(console.warn);
