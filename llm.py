@@ -598,7 +598,7 @@ def generate_home_summary(conversation_id):
             """
             SELECT role, content FROM messages
             WHERE conversation_id = ? AND deleted = 0
-            ORDER BY id DESC LIMIT 8
+            ORDER BY id DESC LIMIT 6
             """,
             (conversation_id,),
         ).fetchall()
@@ -612,7 +612,8 @@ def generate_home_summary(conversation_id):
         "把下面最近一段对话概括成首页卡片摘要。\n"
         "硬性要求：\n"
         "- 严格控制在50个中文字符以内，超出会被截断\n"
-        "- 只保留最核心的一件事\n"
+        "- 优先概括最后1-2轮的内容\n"
+        "- 只有当最后几条信息量不足（比如只是简短调侃或寒暄）时，才往前参考更早内容补充\n"
         "- 写成一句自然完整的话\n"
         "- 不要标题、引号、Markdown符号或解释\n"
         + transcript
