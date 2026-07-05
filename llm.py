@@ -518,7 +518,7 @@ def natural_summary_text(value, limit=60):
     text = re.sub(r"[#*_`>\[\]()~|]", "", str(value))
     text = re.sub(r"\s+", " ", text).strip().strip("\"'“”‘’")
     if len(text) <= limit:
-        return text
+        return text if text.endswith(("。", "！", "？", "!", "?", "…")) else text + "。"
     cut = text[:limit].strip()
     hard_punct = "。！？!?；;"
     soft_punct = "，,、"
@@ -534,9 +534,9 @@ def natural_summary_text(value, limit=60):
 
 def summary_looks_hard_cut(value, limit=60):
     text = str(value or "").strip()
-    if len(text) < limit - 3:
+    if not text or text.endswith(("。", "！", "？", "!", "?", "…")):
         return False
-    return not text.endswith(("。", "！", "？", "!", "?", "…"))
+    return len(text) >= min(30, limit - 3)
 
 
 def record_usage_log(context, result, created_at):

@@ -1,4 +1,4 @@
-const VERSION = "cheng-v125";
+const VERSION = "cheng-v126";
 const CACHE_PREFIX = "cheng-static-";
 const CACHE = `${CACHE_PREFIX}${VERSION}`;
 const STATIC = [

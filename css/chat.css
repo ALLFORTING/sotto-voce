@@ -8,8 +8,8 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 40px;
-  padding: 0 12px;
+  height: calc(44px + var(--safe-top));
+  padding: var(--safe-top) 12px 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -34,14 +34,14 @@
 .chat-top .menu-left {
   position: absolute;
   left: 8px;
-  top: 1px;
+  top: calc(var(--safe-top) + 3px);
 }
 
 .chat-top .chat-search,
 .chat-top .chat-top-spacer {
   position: absolute;
   right: 8px;
-  top: 1px;
+  top: calc(var(--safe-top) + 3px);
 }
 
 .chat-top .chat-top-spacer {
@@ -78,22 +78,23 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: 82px 18px 8px;
+  padding: calc(var(--safe-top) + 58px) 18px 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.18) 22px, rgb(0 0 0 / 0.72) 52px, #000 82px, #000 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.18) 22px, rgb(0 0 0 / 0.72) 52px, #000 82px, #000 100%);
+  scroll-padding-top: calc(var(--safe-top) + 58px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.12) calc(var(--safe-top) + 10px), rgb(0 0 0 / 0.72) calc(var(--safe-top) + 42px), #000 calc(var(--safe-top) + 74px), #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.12) calc(var(--safe-top) + 10px), rgb(0 0 0 / 0.72) calc(var(--safe-top) + 42px), #000 calc(var(--safe-top) + 74px), #000 100%);
 }
 
 .chat-empty {
   flex: 1;
   display: grid;
   place-items: center;
-  padding: 40px 48px 0;
+  padding: calc(var(--safe-top) + 40px) 48px 0;
   color: var(--text-3);
   font-size: 13px;
   line-height: 1.8;

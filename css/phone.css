@@ -4,10 +4,12 @@
 
 :root {
   --app-bg: #FBF8F3;
+  --safe-top: env(safe-area-inset-top, 0px);
 }
 
 html,
-body {
+body,
+#app {
   background: var(--app-bg);
   transition: background-color 250ms ease;
 }
@@ -481,6 +483,8 @@ svg {
 .last-card .body {
   display: -webkit-box;
   overflow: hidden;
+  max-height: 60px;
+  text-overflow: ellipsis;
   color: var(--text-2);
   font-size: 13px;
   line-height: 20px;

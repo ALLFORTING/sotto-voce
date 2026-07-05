@@ -54,11 +54,31 @@ function greetingHtml() {
   return `<h1 class="home-greet">${text}</h1>`;
 }
 
+function summaryForDisplay(value, limit = 52) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.length <= limit) {
+    return /[。！？!?…]$/.test(text) || text.length < 30
+      ? text
+      : `${text.replace(/[，,、；;：:\s]+$/, "")}…`;
+  }
+  const cut = text.slice(0, limit).trim();
+  const hardPunct = "。！？!?；;";
+  const softPunct = "，,、：:";
+  const minPos = Math.max(16, Math.floor(limit * 0.55));
+  const hardPos = Math.max(...[...hardPunct].map((char) => cut.lastIndexOf(char)));
+  if (hardPos >= minPos) return cut.slice(0, hardPos + 1).trim();
+  const softPos = Math.max(...[...softPunct].map((char) => cut.lastIndexOf(char)));
+  if (softPos >= minPos) return `${cut.slice(0, softPos + 1).trim()}…`;
+  return `${cut.replace(/[，,、；;：:。！？!?\s]+$/, "")}…`;
+}
+
 export function renderHome() {
   const home = store.home || {};
   const days = Number.isFinite(home.days_together) ? home.days_together : "—";
   const anniversary = home.upcoming_anniversaries?.[0];
   const last = home.last_conversation || {};
+  const lastSummary = summaryForDisplay(last.summary) || "还没有上次聊天摘要，等你说点什么。";
   const body = `<main class="page home-page">
     <section class="home-hero">
       ${greetingHtml()}
@@ -70,7 +90,7 @@ export function renderHome() {
     </section>
     <button class="last-card" data-go="/chat">
       <div class="head"><span>上次聊到</span><span>${esc(relativeTime(last.updated_at) || "刚刚")}</span></div>
-      <div class="body">${esc(last.summary || "关于那本读到一半的《地下室手记》，你说陀思妥耶夫斯基写人比镜子还狠。我们停在你说明天再读两章那里。")}</div>
+      <div class="body" title="${esc(lastSummary)}">${esc(lastSummary)}</div>
     </button>
     <button class="anniv-hint" data-go="/journal/calendar">
       <span class="dot"></span>

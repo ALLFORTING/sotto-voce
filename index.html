@@ -4,23 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
   <meta name="theme-color" content="#FBF8F3">
+  <script>
+    (() => {
+      const colors = {
+        light: "#FBF8F3",
+        dark: "#2A2421",
+        frost: "#FAFCFF",
+        pearl: "#FDFCFE",
+        academy: "#1A1C16",
+        gothic: "#17161C"
+      };
+      try {
+        const theme = localStorage.getItem("cheng_theme_v2") || localStorage.getItem("cheng_theme") || "light";
+        const bg = colors[theme] || colors.light;
+        document.documentElement.style.setProperty("--app-bg", bg);
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
+      } catch (_) {}
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Sotto Voce">
-  <link rel="manifest" href="/manifest.json?v=20260627-b4">
+  <link rel="manifest" href="/manifest.json?v=cheng-v126">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/css/tokens.css?v=20260627-b4">
-  <link rel="stylesheet" href="/css/phone.css?v=20260627-b4">
-  <link rel="stylesheet" href="/css/chat.css?v=20260627-b4">
-  <link rel="stylesheet" href="/css/overlays.css?v=20260627-b4">
-  <link rel="stylesheet" href="/css/journal.css?v=20260627-b4">
-  <link rel="stylesheet" href="/css/memory.css?v=20260627-b4">
-  <link rel="stylesheet" href="/css/settings.css?v=20260627-b4">
+  <link rel="stylesheet" href="/css/tokens.css?v=cheng-v126">
+  <link rel="stylesheet" href="/css/phone.css?v=cheng-v126">
+  <link rel="stylesheet" href="/css/chat.css?v=cheng-v126">
+  <link rel="stylesheet" href="/css/overlays.css?v=cheng-v126">
+  <link rel="stylesheet" href="/css/journal.css?v=cheng-v126">
+  <link rel="stylesheet" href="/css/memory.css?v=cheng-v126">
+  <link rel="stylesheet" href="/css/settings.css?v=cheng-v126">
   <title>Sotto Voce</title>
 </head>
 <body>
   <div id="app" aria-live="polite"></div>
-  <script type="module" src="/js/router.js?v=cheng-v120"></script>
+  <script type="module" src="/js/router.js?v=cheng-v126"></script>
 </body>
 </html>
 

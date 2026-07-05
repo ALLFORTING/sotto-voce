@@ -85,8 +85,18 @@ function render(html) {
   requestAnimationFrame(() => scrollChat());
 }
 
+function summaryLooksHardCut(value) {
+  const text = String(value || "").trim();
+  if (!text || /[。！？!?…]$/.test(text)) return false;
+  return text.length >= 30;
+}
+
+function homeSummaryLooksHardCut() {
+  return summaryLooksHardCut(store.home?.last_conversation?.summary);
+}
+
 async function loadHome(force = false) {
-  if (!force && store.home && cacheFresh("home", CACHE_MS.home)) return;
+  if (!force && store.home && cacheFresh("home", CACHE_MS.home) && !homeSummaryLooksHardCut()) return;
   saveHomeCache(await api.get("/api/home"));
 }
 
