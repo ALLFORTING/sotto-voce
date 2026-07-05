@@ -25,6 +25,7 @@ const paths = {
   send: '<path d="m4 4 17 8-17 8 4-8-4-8Z"/><path d="M8 12h13"/>',
   clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
+  checks: '<path d="m3.8 12.2 3.2 3.2 7-7"/><path d="m10 15.2 1.2 1.2 8-8"/>',
   file: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v5h5"/>',
   image: '<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m6 17 4-4 3 3 2-2 3 3"/>',
   copy: '<rect x="8" y="8" width="10" height="12" rx="2"/><path d="M6 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/>',
@@ -81,8 +82,8 @@ export function subpageTop(title, right = "") {
 export function chatTop() {
   return `<header class="chat-top">
     <button class="icon-btn menu-left" data-action="drawer">${icon("menu")}</button>
-    <div class="peer"><span>澄</span><span class="online-dot"></span></div>
-    <div class="icon-btn chat-top-spacer" aria-hidden="true"></div>
+    <div class="peer"><span>澄</span></div>
+    <button class="icon-btn chat-search" type="button" title="搜索聊天" data-go="/chat/search">${icon("clock")}</button>
   </header>`;
 }
 

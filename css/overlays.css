@@ -8,8 +8,8 @@
 }
 
 .overlay-scrim.chat-only {
-  top: 42px;
-  bottom: 84px;
+  top: 40px;
+  bottom: 132px;
   background: var(--scrim-heavy);
 }
 
@@ -18,15 +18,15 @@
   position: absolute;
   z-index: 9;
   overflow: hidden;
-  border-radius: 16px;
-  background: var(--bg-elev);
+  border-radius: 14px;
+  background: var(--menu-bg, var(--bg-elev));
   box-shadow: var(--shadow-menu);
   animation: overlay-in 160ms ease-out;
 }
 
 .long-press-menu {
   min-width: 184px;
-  padding: 6px 0;
+  padding: 2px 0;
 }
 
 .long-press-menu .opt,
@@ -38,8 +38,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  color: var(--text);
-  font-size: 14px;
+  color: var(--menu-text, var(--text));
+  font-size: 13.5px;
   letter-spacing: 0.5px;
 }
 
@@ -56,8 +56,8 @@
 
 .long-press-menu svg,
 .plus-menu svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   color: var(--text-2);
 }
 
@@ -68,9 +68,9 @@
 
 .plus-menu {
   left: 14px;
-  bottom: 96px;
+  bottom: 170px;
   min-width: 160px;
-  padding: 8px 0;
+  padding: 2px 0;
 }
 
 .drawer {

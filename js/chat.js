@@ -2,36 +2,99 @@ import { chatTop, esc, formatTime, icon, phone, plainText, relativeTime } from "
 import { store } from "./store.js";
 
 function aiBubbleTexts(value = "") {
-  return String(value || "")
-    .split(/\n+/)
+  const timestampLine = /^\[\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\]$/;
+  const cleaned = String(value || "")
+    .split(/\n/)
     .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((part) => !/^\[\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\]$/.test(part));
+    .filter((part) => !timestampLine.test(part))
+    .join("\n")
+    .trim();
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\n\s*\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function bubbleMetaHtml(message, role, read = false) {
+  if (!message.created_at) return "";
+  return `<span class="bubble-time">${formatTime(message.created_at)}${role === "user" && read ? `<span class="read-checks">${icon("checks")}</span>` : ""}</span>`;
+}
+
+function bubbleContentHtml(text, role) {
+  const content = String(text || "").trim();
+  if (!content) return "";
+  return `<span class="btext">${plainText(content)}<span class="tspace ${role}"></span></span>`;
+}
+
+function messageBubbleHtml({ role, text, message, tail = true, read = false, attachments = "" }) {
+  return `<div class="msg-bubble ${tail ? "tail" : ""} ${message.created_at ? "has-time" : ""}">
+    ${bubbleContentHtml(text, role)}
+    ${attachments}
+    ${bubbleMetaHtml(message, role, read)}
+  </div>`;
 }
 
 function aiBubblesHtml(message) {
   const parts = aiBubbleTexts(message.content);
-  return parts.map((part) => `<div class="msg-bubble">${plainText(part)}</div>`).join("");
+  return parts.map((part, index) => messageBubbleHtml({
+    role: "ai",
+    text: part,
+    message,
+    tail: index === parts.length - 1
+  })).join("");
+}
+
+function splitThoughtParagraphs(value = "") {
+  return String(value || "")
+    .split(/\n\s*\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function parseThoughtSteps(text = "") {
+  const chunks = String(text || "").split(/\[mcp:([^\]]+)\]/);
+  const steps = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const content = chunks[i].trim();
+    if (!content) continue;
+    if (i % 2 === 0) {
+      splitThoughtParagraphs(content).forEach((paragraph) => {
+        steps.push({ text: paragraph, tools: [] });
+      });
+    } else {
+      const previous = steps[steps.length - 1];
+      if (previous) previous.tools.push(content);
+      else steps.push({ text: "", tools: [content] });
+    }
+  }
+  if (!steps.length && String(text || "").trim()) {
+    steps.push({ text: String(text || "").trim(), tools: [] });
+  }
+  return steps;
+}
+
+function thoughtToolHtml(name) {
+  const dotIndex = name.indexOf(".");
+  const server = dotIndex > -1 ? name.slice(0, dotIndex) : "mcp";
+  const action = dotIndex > -1 ? name.slice(dotIndex + 1) : name;
+  return `<span class="mcp-tag"><span>${esc(server)}</span><span>${esc(action)}</span></span>`;
 }
 
 function thoughtContentHtml(text, done = false) {
-  const parts = String(text || "").split(/\[mcp:([^\]]+)\]/);
-  let html = '<div class="thought-timeline">';
-  for (let i = 0; i < parts.length; i++) {
-    const content = parts[i].trim();
-    if (!content) continue;
-    if (i % 2 === 0) {
-      html += `<div class="thought-step"><span class="step-icon">${icon("clock")}</span><span class="step-text">${esc(content)}</span></div>`;
-    } else {
-      const name = content;
-      const dotIndex = name.indexOf(".");
-      const server = dotIndex > -1 ? name.slice(0, dotIndex) : "mcp";
-      const action = dotIndex > -1 ? name.slice(dotIndex + 1) : name;
-      html += `<div class="thought-step tool"><span class="tool-label">${esc(server)}</span><span class="tool-action">${esc(action)}</span></div>`;
-    }
-  }
+  const steps = parseThoughtSteps(text);
+  let html = '<div class="thought-body">';
+  steps.forEach((step) => {
+    html += `<div class="tstep">
+      <span class="tmark">${icon("clock")}</span>
+      <div class="tbody">
+        ${step.text ? `<div class="ttext">${esc(step.text)}</div>` : ""}
+        ${step.tools.length ? `<div class="mcp-tags">${step.tools.map(thoughtToolHtml).join("")}</div>` : ""}
+      </div>
+    </div>`;
+  });
   if (done) {
-    html += `<div class="thought-step done"><span class="step-icon">${icon("check")}</span><span class="step-text">Done</span></div>`;
+    html += `<div class="tstep done"><span class="tmark">${icon("check")}</span><div class="tbody"><div class="ttext">Done</div></div></div>`;
   }
   html += "</div>";
   return html;
@@ -44,7 +107,7 @@ function thoughtHtml(message) {
   const label = message.thinkingStarted
     ? "Thinking..."
     : `Thought for ${Number(message.thinking_seconds || 0).toFixed(1)}s`;
-  return `<div class="thought">
+  return `<div class="thought thought-h">
     <button data-action="toggle-thought" ${text ? "" : "disabled"}>
       <span class="chev">${icon(open ? "chevD" : "chevR")}</span>
       <span>${label}</span>
@@ -134,6 +197,12 @@ function shouldShowDateDivider(message, previous) {
   return !previous?.created_at || localDateKey(message.created_at) !== localDateKey(previous.created_at);
 }
 
+function hasAiReplyAfter(index, messages) {
+  return messages.slice(index + 1).some((item) =>
+    item.role === "assistant" && (String(item.content || "").trim() || String(item.thinking || "").trim())
+  );
+}
+
 export function messageHtml(message, index, messages) {
   const role = message.role === "assistant" ? "ai" : "user";
   const previous = messages[index - 1];
@@ -143,14 +212,20 @@ export function messageHtml(message, index, messages) {
   const streamKey = message.streamKey ? ` data-stream-key="${esc(message.streamKey)}"` : "";
   const messageId = message.id ? ` data-message-id="${message.id}"` : "";
   const messageIndex = ` data-message-index="${index}"`;
-  const content = role === "ai" ? aiBubblesHtml(message) : plainText(message.content || "");
-  const attachments = role === "user" ? attachmentsHtml(message) : "";
+  const read = role === "user" && hasAiReplyAfter(index, messages);
+  const content = role === "ai" ? aiBubblesHtml(message) : messageBubbleHtml({
+    role,
+    text: message.content || "",
+    message,
+    tail: true,
+    read,
+    attachments: attachmentsHtml(message)
+  });
   return `${dateDivider}
     <article class="msg-row ${role} ${message.streaming ? "streaming" : ""} ${message.starred ? "starred" : ""}" data-role="${message.role}"${messageId}${streamKey}${messageIndex}>
       ${role === "ai" ? thoughtHtml(message) : ""}
       ${role === "ai" && toolsHtml(message) ? `<div class="tool-tags">${toolsHtml(message)}</div>` : ""}
-      ${role === "ai" ? `<div class="ai-group">${content}</div>` : `<div class="msg-bubble">${content}${attachments}</div>`}
-      ${message.created_at ? `<div class="msg-foot">${formatTime(message.created_at)}</div>` : ""}
+      ${role === "ai" ? `<div class="ai-group">${content}</div>` : content}
     </article>`;
 }
 
@@ -277,6 +352,7 @@ export function appendStreamText(message, text) {
     if (!current || message.pendingBubbleBreak) {
       current = document.createElement("div");
       current.className = "msg-bubble";
+      current.innerHTML = '<span class="btext"></span>';
       group.append(current);
       message.pendingBubbleBreak = false;
     }
@@ -285,11 +361,20 @@ export function appendStreamText(message, text) {
   String(text).split(/(\n+)/).forEach((part) => {
     if (!part) return;
     if (/^\n+$/.test(part)) {
-      if (current?.textContent.trim()) message.pendingBubbleBreak = true;
+      message.pendingStreamNewlines = (message.pendingStreamNewlines || 0) + part.length;
       return;
     }
+    if (message.pendingStreamNewlines) {
+      if (message.pendingStreamNewlines >= 2 && current?.textContent.trim()) {
+        message.pendingBubbleBreak = true;
+      } else if (current?.textContent.trim()) {
+        appendText(current.querySelector(".btext") || current, "\n".repeat(message.pendingStreamNewlines));
+      }
+      message.pendingStreamNewlines = 0;
+    }
     if (!part.trim() && !current) return;
-    appendText(ensureBubble(), part);
+    const bubble = ensureBubble();
+    appendText(bubble.querySelector(".btext") || bubble, part);
   });
 }
 
@@ -310,13 +395,7 @@ export function updateStreamMeta(message, final = false) {
     if (message.id) article.dataset.messageId = message.id;
     updateThoughtDom(article, message);
     if (group) group.innerHTML = aiBubblesHtml(message);
-    else if (bubble) bubble.innerHTML = plainText(message.content);
-    if (!article.querySelector(".msg-foot")) {
-      const foot = document.createElement("div");
-      foot.className = "msg-foot";
-      foot.textContent = formatTime(message.created_at);
-      article.append(foot);
-    }
+    else if (bubble) bubble.outerHTML = messageBubbleHtml({ role: "ai", text: message.content, message, tail: true });
   } else {
     updateThoughtDom(article, message);
   }
