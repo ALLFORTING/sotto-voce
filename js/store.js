@@ -1,4 +1,4 @@
-export const VERSION = "cheng-v127";
+export const VERSION = "cheng-v128";
 
 const readJson = (key, fallback) => {
   try {
@@ -34,6 +34,16 @@ export const store = {
   chatDraft: "",
   pendingAttachments: [],
   contextPct: 0.02,
+  pendingJumpMessageId: null,
+  searchQuery: "",
+  searchMode: "home",
+  searchGroups: [],
+  searchDetail: [],
+  searchMedia: [],
+  searchMonth: thisMonthChina(),
+  searchMonthDays: [],
+  searchDateGroups: [],
+  searchConversationTitle: "",
   calendarMonth: thisMonthChina(),
   calendarSelectedDate: todayChina(),
   calendar: null,
@@ -75,7 +85,12 @@ export const store = {
   expandedMcpId: null,
   addingPreset: false,
   addingMcp: false,
+  newPresetDraft: null,
   visiblePresetKeys: {},
+  modelOptions: {},
+  modelManualModels: {},
+  modelOptionErrors: {},
+  modelLoading: null,
   bucketEdit: null,
   loading: false,
   error: ""

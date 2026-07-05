@@ -59,6 +59,7 @@ let navigationId = 0;
 let longPressTimer = 0;
 let longPressStart = null;
 let suppressBookCardClick = false;
+let searchCalendarY0 = null;
 
 const CACHE_MS = {
   home: 5 * 60_000,
@@ -83,7 +84,10 @@ function go(path) {
 
 function render(html) {
   app.innerHTML = html;
-  requestAnimationFrame(() => scrollChat());
+  requestAnimationFrame(() => {
+    if (route() === "/chat" && store.pendingJumpMessageId) schedulePendingMessageJump();
+    else scrollChat();
+  });
 }
 
 function summaryLooksHardCut(value) {
@@ -227,6 +231,18 @@ async function loadSettings(force = false) {
   store.cacheAt.settings = Date.now();
 }
 
+function rememberPresetDraft(form) {
+  const data = formValue(form);
+  const presetId = Number(form.dataset.id || 0);
+  if (presetId) {
+    const preset = store.presets.find((item) => item.id === presetId);
+    if (preset) Object.assign(preset, data);
+  } else {
+    store.newPresetDraft = { ...(store.newPresetDraft || {}), ...data };
+  }
+  return data;
+}
+
 async function loadTerminalHistory() {
   store.terminalHistory = await api.get("/api/terminal/history");
 }
@@ -324,24 +340,168 @@ function handleProgressDrag(event, bar) {
   }
 }
 
-function renderSearchPage(results = []) {
-  const rows = results.map((item) => `<button class="search-result" data-search-conversation="${item.conversation_id}">
-    <span class="top"><span class="who">${item.role === "assistant" ? "澄" : "我"}</span><span>${esc(item.created_at?.slice(0, 10) || "")}</span></span>
-    <span class="body">${esc(String(item.content || "").slice(0, 120))}</span>
-  </button>`).join("");
+function resetSearchState() {
+  store.searchQuery = "";
+  store.searchMode = "home";
+  store.searchGroups = [];
+  store.searchDetail = [];
+  store.searchMedia = [];
+  store.searchDateGroups = [];
+  store.searchConversationTitle = "";
+}
+
+function chinaDate(value) {
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function monthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftMonth(month, delta) {
+  const [year, index] = String(month).split("-").map(Number);
+  const date = new Date(year || new Date().getFullYear(), (index || 1) - 1 + delta, 1);
+  return monthKey(date);
+}
+
+function searchDateLabel(value) {
+  const date = chinaDate(value);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "昨天";
+  const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][date.getDay()];
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  if (day >= weekStart) return weekday;
+  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()) return "本月";
+  return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, "0")}月`;
+}
+
+function searchTime(value) {
+  const date = chinaDate(value);
+  return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function searchPreview(item) {
+  const text = String(item?.content || "").trim();
+  if (text) return text.slice(0, 120);
+  const attachments = item?.attachments || [];
+  if (attachments.length) return attachments.map((file) => file.name || "附件").join("、").slice(0, 120);
+  return "（空消息）";
+}
+
+function groupedMediaRows(items) {
+  const groups = [];
+  for (const item of items) {
+    const label = searchDateLabel(item.created_at);
+    let group = groups[groups.length - 1];
+    if (!group || group.label !== label) {
+      group = { label, items: [] };
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups.map((group) => `<section class="search-section">
+    <div class="search-section-title">${esc(group.label)}</div>
+    ${group.items.map((item) => `<button class="search-result media" data-search-message="${item.id}" data-search-conversation="${item.conversation_id}">
+      <span class="top"><span class="who">${esc(item.conversation_title || "新对话")}</span><span>${searchTime(item.created_at)}</span></span>
+      <span class="body">${(item.attachments || []).map((file) => `[${file.type === "image" ? "图片" : "文件"}: ${esc(file.name || "附件")}]`).join(" ")}</span>
+    </button>`).join("")}
+  </section>`).join("");
+}
+
+function searchCalendarHtml() {
+  const [year, month] = store.searchMonth.split("-").map(Number);
+  const first = new Date(year, month - 1, 1);
+  const total = new Date(year, month, 0).getDate();
+  const offset = (first.getDay() + 6) % 7;
+  const counts = new Map((store.searchMonthDays || []).map((item) => [item.date, item]));
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push(`<span class="day ghost"></span>`);
+  for (let day = 1; day <= total; day++) {
+    const key = `${store.searchMonth}-${String(day).padStart(2, "0")}`;
+    const hit = counts.get(key);
+    cells.push(`<button class="day ${hit ? "has" : ""}" data-search-day="${key}">
+      <span>${day}</span>${hit ? `<i>${hit.count}</i>` : ""}
+    </button>`);
+  }
+  return `<section class="search-calendar">
+    <div class="cal-head">
+      <button data-action="search-prev-month">${icon("back")}</button>
+      <div><strong>${month}月</strong><span>${year}</span></div>
+      <button data-action="search-next-month">${icon("forward")}</button>
+    </div>
+    <div class="week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+    <div class="days">${cells.join("")}</div>
+  </section>`;
+}
+
+function renderSearchPage() {
+  let rows = "";
+  if (store.searchMode === "keyword-groups") {
+    rows = store.searchGroups.length ? store.searchGroups.map((group) => `<button class="search-result grouped" data-search-group="${group.conversation_id}">
+      <span class="top"><span class="who">${esc(group.conversation_title || "新对话")}</span><span>${group.count} 条</span></span>
+      <span class="body">${esc(searchPreview(group.preview))}</span>
+      <span class="meta">共 ${group.count} 条相关的聊天记录</span>
+    </button>`).join("") : `<div class="loading-text">没有找到相关聊天记录。</div>`;
+  } else if (store.searchMode === "keyword-detail") {
+    rows = `<div class="search-detail-title">${esc(store.searchConversationTitle || "聊天记录")}</div>${store.searchDetail.map((item) => `<button class="search-result" data-search-message="${item.id}" data-search-conversation="${item.conversation_id}">
+      <span class="top"><span class="who">${item.role === "assistant" ? "澄" : "我"}</span><span>${searchTime(item.created_at)}</span></span>
+      <span class="body">${esc(searchPreview(item))}</span>
+    </button>`).join("") || `<div class="loading-text">没有找到相关聊天记录。</div>`}`;
+  } else if (store.searchMode === "image" || store.searchMode === "file") {
+    rows = store.searchMedia.length ? groupedMediaRows(store.searchMedia) : `<div class="loading-text">还没有找到${store.searchMode === "image" ? "图片" : "文件"}。</div>`;
+  } else if (store.searchMode === "date") {
+    rows = searchCalendarHtml();
+  } else {
+    rows = `<div class="loading-text">输入关键词后回车搜索，或选择文件、图片、日期。</div>`;
+  }
   const body = `<main class="page">
     ${subpageTop("搜索聊天")}
-    <form id="chat-search-form" class="search-bar"><input name="q" value="陀思妥耶夫斯基" placeholder="搜索聊天"></form>
-    <div class="filter-row"><button class="chip">文件</button><button class="chip">图片</button></div>
+    <form id="chat-search-form" class="search-bar"><input name="q" value="${esc(store.searchQuery || "")}" placeholder="搜索聊天"></form>
+    <div class="filter-row"><button class="chip" data-action="search-media" data-kind="file">文件</button><button class="chip" data-action="search-media" data-kind="image">图片</button><button class="chip" data-action="search-date-mode">日期</button></div>
     <section class="scroll" id="search-results">${rows || '<div class="loading-text">输入关键词后回车搜索。</div>'}</section>
   </main>`;
   return phone({ activeTab: "chat", hideTab: true, body });
 }
 
+async function loadSearchMonth(month = store.searchMonth) {
+  store.searchMonth = month;
+  store.searchMonthDays = await api.get(`/api/search?type=dates&month=${encodeURIComponent(month)}`);
+}
+
+function schedulePendingMessageJump() {
+  const id = store.pendingJumpMessageId;
+  if (!id) return scrollChat();
+  const target = document.querySelector(`[data-message-id="${id}"]`);
+  if (!target) {
+    store.pendingJumpMessageId = null;
+    return scrollChat();
+  }
+  target.scrollIntoView({ block: "center" });
+  target.classList.add("jump-highlight");
+  store.pendingJumpMessageId = null;
+  setTimeout(() => target.classList.remove("jump-highlight"), 1800);
+}
+
+async function jumpToChatMessage(conversationId, messageId) {
+  store.pendingJumpMessageId = Number(messageId);
+  rememberConversation(Number(conversationId));
+  await loadMessages(true);
+  go("/chat");
+  if (route() === "/chat") render(renderChat());
+}
+
 async function navigate() {
   const id = ++navigationId;
   const path = route();
+  const previousPath = store.route;
   store.route = path;
+  if (path === "/chat/search" && previousPath !== path) resetSearchState();
   updateThemeMeta();
   if (!store.token) {
     render(tokenGate());
@@ -378,7 +538,8 @@ async function verifyToken(token) {
 
 async function sendMessage(content, attachments = [], options = {}) {
   const regenerating = Boolean(options.messageId);
-  if (!regenerating && !store.conversationId) await createConversation();
+  const editing = Boolean(options.editMessageId);
+  if (!regenerating && !editing && !store.conversationId) await createConversation();
   const assistant = {
     role: "assistant",
     content: "",
@@ -389,7 +550,7 @@ async function sendMessage(content, attachments = [], options = {}) {
     streaming: true,
     streamKey: `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`
   };
-  if (regenerating) {
+  if (regenerating || editing) {
     store.messages.splice(options.index, 0, assistant);
   } else {
     store.messages.push({
@@ -457,7 +618,11 @@ async function sendMessage(content, attachments = [], options = {}) {
   };
   try {
     await streamChat(
-      regenerating ? { message_id: options.messageId } : { conversation_id: store.conversationId, content, attachments },
+      editing
+        ? { message_id: options.editMessageId, content }
+        : regenerating
+          ? { message_id: options.messageId }
+          : { conversation_id: store.conversationId, content, attachments },
       (event, data) => {
         if (event === "thinking_start") {
           pending.sawThinking = true;
@@ -492,7 +657,7 @@ async function sendMessage(content, attachments = [], options = {}) {
         }
         if (event === "error") throw new Error(data.message);
       },
-      regenerating ? "/api/chat/regenerate" : "/api/chat"
+      editing ? "/api/chat/edit" : regenerating ? "/api/chat/regenerate" : "/api/chat"
     );
   } catch (error) {
     assistant.streaming = false;
@@ -506,7 +671,6 @@ function clearLongPress() {
   clearTimeout(longPressTimer);
   longPressTimer = 0;
   longPressStart = null;
-  document.querySelector(".long-press-active")?.classList.remove("long-press-active");
 }
 
 function dismissLongPress() {
@@ -678,10 +842,12 @@ document.addEventListener("click", async (event) => {
     if (action === "close-overlay") {
       if (store.longPress && store.drawerOpen) {
         store.longPress = null;
+        document.querySelector(".long-press-active")?.classList.remove("long-press-active");
         const overlay = document.querySelector(".phone-overlay-layer");
         if (overlay) overlay.innerHTML = renderDrawer();
         return;
       }
+      if (store.longPress) return dismissLongPress();
       store.drawerOpen = false;
       store.plusOpen = false;
       store.longPress = null;
@@ -698,6 +864,57 @@ document.addEventListener("click", async (event) => {
     if (action === "change-token") {
       clearToken();
       return render(tokenGate("请输入新的访问令牌。"));
+    }
+    if (action === "search-media") {
+      const kind = actionEl?.dataset.kind;
+      if (!["image", "file"].includes(kind)) return;
+      store.searchMode = kind;
+      store.searchMedia = await api.get(`/api/search?type=${kind}`);
+      return render(renderSearchPage());
+    }
+    if (action === "search-date-mode") {
+      store.searchMode = "date";
+      await loadSearchMonth(monthKey());
+      return render(renderSearchPage());
+    }
+    if (action === "search-prev-month" || action === "search-next-month") {
+      const delta = action === "search-next-month" ? 1 : -1;
+      await loadSearchMonth(shiftMonth(store.searchMonth, delta));
+      return render(renderSearchPage());
+    }
+    if (action === "refresh-models") {
+      const form = actionEl.closest("[data-preset-form]");
+      if (!form) return;
+      const key = actionEl.dataset.keyId || "new";
+      const draft = rememberPresetDraft(form);
+      store.modelLoading = key;
+      store.modelOptionErrors[key] = "";
+      render(renderApiSettings());
+      try {
+        const data = await api.post("/api/models/list", {
+          endpoint: draft.endpoint,
+          api_key: draft.api_key,
+          format: draft.format
+        });
+        store.modelOptions[key] = data.models || [];
+        store.modelManualModels[key] = !store.modelOptions[key].length;
+        if (!store.modelOptions[key].length) store.modelOptionErrors[key] = "没有拿到可用模型，请手动输入。";
+      } catch (error) {
+        store.modelOptions[key] = [];
+        store.modelManualModels[key] = true;
+        store.modelOptionErrors[key] = error.message;
+        toast(error.message);
+      } finally {
+        store.modelLoading = null;
+      }
+      return render(renderApiSettings());
+    }
+    if (action === "toggle-model-manual") {
+      const form = actionEl.closest("[data-preset-form]");
+      if (form) rememberPresetDraft(form);
+      const key = actionEl.dataset.keyId || "new";
+      store.modelManualModels[key] = !store.modelManualModels[key];
+      return render(renderApiSettings());
     }
     if (action === "exec-command") {
       const input = document.querySelector("#term-cmd-input");
@@ -887,10 +1104,13 @@ document.addEventListener("click", async (event) => {
     if (action === "add-preset") {
       store.addingPreset = true;
       store.expandedPresetId = null;
+      store.newPresetDraft = null;
       return render(renderApiSettings());
     }
     if (action === "toggle-preset-key") {
       const key = event.target.closest("[data-key-id]").dataset.keyId;
+      const form = event.target.closest("[data-preset-form]");
+      if (form) rememberPresetDraft(form);
       store.visiblePresetKeys[key] = !store.visiblePresetKeys[key];
       return render(renderApiSettings());
     }
@@ -932,9 +1152,41 @@ document.addEventListener("click", async (event) => {
     return render(renderCalendar());
   }
   const searchConversationId = event.target.closest("[data-search-conversation]")?.dataset.searchConversation;
-  if (searchConversationId) {
-    rememberConversation(searchConversationId);
-    return go("/chat");
+  const searchMessageId = event.target.closest("[data-search-message]")?.dataset.searchMessage;
+  if (searchConversationId && searchMessageId) {
+    return jumpToChatMessage(searchConversationId, searchMessageId);
+  }
+  const searchGroupId = event.target.closest("[data-search-group]")?.dataset.searchGroup;
+  if (searchGroupId) {
+    store.searchDetail = await api.get(`/api/search?type=keyword_detail&q=${encodeURIComponent(store.searchQuery)}&conversation_id=${encodeURIComponent(searchGroupId)}`);
+    const group = store.searchGroups.find((item) => Number(item.conversation_id) === Number(searchGroupId));
+    store.searchConversationTitle = group?.conversation_title || "聊天记录";
+    store.searchMode = "keyword-detail";
+    return render(renderSearchPage());
+  }
+  const searchDay = event.target.closest("[data-search-day]")?.dataset.searchDay;
+  if (searchDay) {
+    const groups = await api.get(`/api/search?type=date&date=${encodeURIComponent(searchDay)}`);
+    if (!groups.length) return toast("这一天没有聊天记录");
+    if (groups.length === 1) return jumpToChatMessage(groups[0].conversation_id, groups[0].message_id);
+    store.searchDateGroups = groups;
+    const overlay = document.querySelector(".phone-overlay-layer");
+    if (overlay) {
+      overlay.innerHTML = `<div class="overlay-scrim" data-action="close-overlay"></div>
+        <section class="search-choice-panel">
+          <div class="title">选择对话</div>
+          ${groups.map((item) => `<button data-date-conversation="${item.conversation_id}" data-message-id="${item.message_id}">
+            <span>${esc(item.conversation_title || "新对话")}</span><em>${item.count} 条</em>
+          </button>`).join("")}
+        </section>`;
+    }
+    return;
+  }
+  const dateConversation = event.target.closest("[data-date-conversation]");
+  if (dateConversation) {
+    const overlay = document.querySelector(".phone-overlay-layer");
+    if (overlay) overlay.innerHTML = "";
+    return jumpToChatMessage(dateConversation.dataset.dateConversation, dateConversation.dataset.messageId);
   }
   const domain = event.target.closest("[data-domain]")?.dataset.domain;
   if (domain) {
@@ -1040,13 +1292,15 @@ document.addEventListener("submit", async (event) => {
     }
     if (form.matches("[data-preset-form]")) {
       const presetId = Number(form.dataset.id || 0);
-      const body = { ...data, active: Boolean(event.submitter?.dataset.activate) };
+      const body = { ...data };
+      if (event.submitter?.dataset.activate) body.active = true;
       if (presetId) await api.patch(`/api/presets/${presetId}`, body);
       else await api.post("/api/presets", body);
       store.addingPreset = false;
+      store.newPresetDraft = null;
       await loadSettings(true);
       render(renderApiSettings());
-      toast("API 预设已保存");
+      toast(body.active ? "API 预设已启用" : "API 预设已保存");
     }
     if (form.matches("[data-mcp-form]")) {
       const serverId = Number(form.dataset.id || 0);
@@ -1064,8 +1318,15 @@ document.addEventListener("submit", async (event) => {
       toast("纪念日已添加");
     }
     if (form.id === "chat-search-form") {
-      const results = await api.get(`/api/search?q=${encodeURIComponent(data.q)}&type=all`);
-      render(renderSearchPage(results));
+      store.searchQuery = String(data.q || "").trim();
+      if (!store.searchQuery) {
+        store.searchMode = "home";
+        store.searchGroups = [];
+        return render(renderSearchPage());
+      }
+      store.searchGroups = await api.get(`/api/search?type=keyword&q=${encodeURIComponent(store.searchQuery)}`);
+      store.searchMode = "keyword-groups";
+      render(renderSearchPage());
     }
   } catch (error) {
     toast(error.message);
@@ -1078,6 +1339,14 @@ document.addEventListener("click", (event) => {
   const form = pick.closest("form");
   form.querySelector('input[name="format"]').value = pick.dataset.formatPick;
   form.querySelectorAll(".pick").forEach((node) => node.classList.toggle("active", node === pick));
+  if (form.matches("[data-preset-form]")) {
+    const key = form.dataset.id || "new";
+    store.modelOptions[key] = [];
+    store.modelManualModels[key] = true;
+    store.modelOptionErrors[key] = "";
+    rememberPresetDraft(form);
+    render(renderApiSettings());
+  }
 });
 
 document.addEventListener("contextmenu", (event) => {
@@ -1101,8 +1370,14 @@ async function handleMessageAction(action) {
   if (action === "edit") {
     const content = prompt("编辑消息", target.content);
     if (content?.trim()) {
-      await api.patch(`/api/messages/${target.id}`, { content: content.trim() });
+      const index = store.messages.indexOf(target);
       target.content = content.trim();
+      store.messages = store.messages.slice(0, index + 1);
+      cacheMessages(store.conversationId, store.messages);
+      store.longPress = null;
+      render(renderChat());
+      await sendMessage(content.trim(), [], { editMessageId: target.id, index: index + 1 });
+      return;
     }
   }
   if (action === "delete") {
@@ -1170,6 +1445,8 @@ document.addEventListener("touchmove", (event) => {
 }, { passive: false });
 
 document.addEventListener("touchstart", (event) => {
+  const calendar = event.target.closest(".search-calendar");
+  if (calendar) searchCalendarY0 = event.changedTouches[0].screenY;
   const bar = event.target.closest(".pbar-touch");
   if (!bar) return;
   store._dragging = true;
@@ -1182,7 +1459,16 @@ document.addEventListener("touchmove", (event) => {
   if (bar) handleProgressDrag(event, bar);
 }, { passive: true });
 
-document.addEventListener("touchend", () => {
+document.addEventListener("touchend", async (event) => {
+  if (searchCalendarY0 !== null) {
+    const dy = event.changedTouches[0].screenY - searchCalendarY0;
+    searchCalendarY0 = null;
+    if (route() === "/chat/search" && store.searchMode === "date" && Math.abs(dy) > 60) {
+      await loadSearchMonth(shiftMonth(store.searchMonth, dy < 0 ? 1 : -1));
+      render(renderSearchPage());
+      return;
+    }
+  }
   if (!store._dragging) return;
   store._dragging = false;
   const book = store.bookData?.book;

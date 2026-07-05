@@ -6,6 +6,9 @@ import re
 import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
+
+import httpx
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger().setLevel(logging.INFO)
@@ -20,6 +23,7 @@ from llm import (
     chat_events,
     generate_home_summary,
     load_chat_context,
+    load_edit_context,
     load_regeneration_context,
     short_completion,
 )
@@ -210,6 +214,31 @@ def attachment_placeholders(raw):
         is_image = item.get("type") == "image" or str(item.get("mime_type") or "").startswith("image/")
         placeholders.append(f"[{'图片' if is_image else '附件'}: {name}]")
     return placeholders
+
+
+def attachment_items(raw):
+    if not raw:
+        return []
+    try:
+        attachments = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return []
+    return attachments if isinstance(attachments, list) else []
+
+
+def filter_attachments(raw, kind):
+    items = []
+    for item in attachment_items(raw):
+        if not isinstance(item, dict):
+            continue
+        item_type = str(item.get("type") or "")
+        mime = str(item.get("mime_type") or "")
+        is_image = item_type == "image" or mime.startswith("image/")
+        if kind == "image" and is_image:
+            items.append(item)
+        elif kind == "file" and not is_image:
+            items.append(item)
+    return items
 
 
 def normalize_export_options(data):
@@ -650,29 +679,153 @@ def delete_message(message_id):
 @app.get("/api/search")
 def search():
     query = request.args.get("q", "").strip()
-    search_type = request.args.get("type", "all")
-    if search_type not in {"all", "file", "image"}:
-        return bad_request("type must be all, file, or image.")
-    if not query:
-        return jsonify([])
-    clauses = ["m.deleted = 0", "(m.content LIKE ? OR m.attachments LIKE ?)"]
-    values = [f"%{query}%", f"%{query}%"]
-    if search_type != "all":
-        clauses.append("m.attachments LIKE ?")
-        values.append(f'%\"type\": \"{search_type}\"%')
-    sql = f"""
-        SELECT m.*, c.title AS conversation_title
-        FROM messages m
-        JOIN conversations c ON c.id = m.conversation_id
-        WHERE {" AND ".join(clauses)}
-        ORDER BY m.created_at DESC
-    """
+    search_type = request.args.get("type", "keyword")
     with connection() as conn:
-        results = rows_to_dicts(conn.execute(sql, values).fetchall())
-    for item in results:
-        if item["attachments"]:
-            item["attachments"] = json.loads(item["attachments"])
-    return jsonify(results)
+        if search_type in {"all", "keyword"}:
+            if not query:
+                return jsonify([])
+            rows = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT m.*, c.title AS conversation_title
+                    FROM messages m
+                    JOIN conversations c ON c.id = m.conversation_id
+                    WHERE m.deleted = 0
+                      AND (m.content LIKE ? OR m.attachments LIKE ?)
+                    ORDER BY m.created_at DESC, m.id DESC
+                    """,
+                    (f"%{query}%", f"%{query}%"),
+                ).fetchall()
+            )
+            groups = {}
+            for row in rows:
+                if row.get("attachments"):
+                    row["attachments"] = attachment_items(row["attachments"])
+                key = row["conversation_id"]
+                group = groups.setdefault(
+                    key,
+                    {
+                        "conversation_id": key,
+                        "conversation_title": row.get("conversation_title") or "新对话",
+                        "count": 0,
+                        "preview": row,
+                    },
+                )
+                group["count"] += 1
+            return jsonify(list(groups.values()))
+
+        if search_type == "keyword_detail":
+            if not query:
+                return jsonify([])
+            try:
+                conversation_id = int(request.args.get("conversation_id"))
+            except (TypeError, ValueError):
+                return bad_request("conversation_id is required.")
+            rows = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT m.*, c.title AS conversation_title
+                    FROM messages m
+                    JOIN conversations c ON c.id = m.conversation_id
+                    WHERE m.deleted = 0
+                      AND m.conversation_id = ?
+                      AND (m.content LIKE ? OR m.attachments LIKE ?)
+                    ORDER BY m.created_at DESC, m.id DESC
+                    """,
+                    (conversation_id, f"%{query}%", f"%{query}%"),
+                ).fetchall()
+            )
+            for row in rows:
+                if row.get("attachments"):
+                    row["attachments"] = attachment_items(row["attachments"])
+            return jsonify(rows)
+
+        if search_type in {"image", "file"}:
+            rows = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT m.*, c.title AS conversation_title
+                    FROM messages m
+                    JOIN conversations c ON c.id = m.conversation_id
+                    WHERE m.deleted = 0
+                      AND m.attachments IS NOT NULL
+                      AND (m.attachments LIKE ? OR m.attachments LIKE ?)
+                    ORDER BY m.created_at DESC, m.id DESC
+                    """,
+                    (
+                        f'%\"type\": \"{search_type}\"%',
+                        f'%\"type\":\"{search_type}\"%',
+                    ),
+                ).fetchall()
+            )
+            results = []
+            for row in rows:
+                attachments = filter_attachments(row.get("attachments"), search_type)
+                if not attachments:
+                    continue
+                row["attachments"] = attachments
+                results.append(row)
+            return jsonify(results)
+
+        if search_type == "dates":
+            try:
+                month = normalize_month(request.args.get("month"))
+            except ValueError as error:
+                return bad_request(str(error))
+            start, end = month_range(month)
+            rows = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT substr(created_at, 1, 10) AS date,
+                           COUNT(*) AS count,
+                           COUNT(DISTINCT conversation_id) AS conversation_count
+                    FROM messages
+                    WHERE deleted = 0 AND created_at >= ? AND created_at < ?
+                    GROUP BY substr(created_at, 1, 10)
+                    ORDER BY date
+                    """,
+                    (start, end),
+                ).fetchall()
+            )
+            return jsonify(rows)
+
+        if search_type == "date":
+            try:
+                day = parse_iso_day(request.args.get("date"))
+            except ValueError as error:
+                return bad_request(str(error))
+            start = day.isoformat()
+            end = (day + timedelta(days=1)).isoformat()
+            rows = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT m.*, c.title AS conversation_title
+                    FROM messages m
+                    JOIN conversations c ON c.id = m.conversation_id
+                    WHERE m.deleted = 0 AND m.created_at >= ? AND m.created_at < ?
+                    ORDER BY m.created_at, m.id
+                    """,
+                    (start, end),
+                ).fetchall()
+            )
+            groups = {}
+            for row in rows:
+                key = row["conversation_id"]
+                group = groups.setdefault(
+                    key,
+                    {
+                        "conversation_id": key,
+                        "conversation_title": row.get("conversation_title") or "新对话",
+                        "count": 0,
+                        "message_id": row["id"],
+                        "created_at": row["created_at"],
+                        "preview": row.get("content") or "",
+                    },
+                )
+                group["count"] += 1
+            return jsonify(list(groups.values()))
+
+    return bad_request("type must be keyword, keyword_detail, image, file, dates, or date.")
 
 
 def list_resource(table):
@@ -689,9 +842,81 @@ def delete_resource(table, resource_id, label):
     return jsonify({"deleted": True, "id": resource_id})
 
 
+def model_list_url(endpoint, api_format):
+    base = str(endpoint or "").strip().rstrip("/")
+    if not base:
+        raise ValueError("endpoint is required.")
+    parsed = urlparse(base)
+    host = parsed.hostname or ""
+    if api_format == "openai" and host.endswith("openrouter.ai"):
+        return f"{parsed.scheme or 'https'}://{parsed.netloc}/api/v1/models"
+    if base.endswith("/v1/models"):
+        return base
+    if base.endswith("/models"):
+        return base
+    if base.endswith("/v1"):
+        return f"{base}/models"
+    return f"{base}/v1/models"
+
+
+def normalize_model_rows(data):
+    rows = data.get("data", data) if isinstance(data, dict) else data
+    if not isinstance(rows, list):
+        return []
+    models = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        model_id = str(item.get("id") or "").strip()
+        if not model_id:
+            continue
+        models.append(
+            {
+                "id": model_id,
+                "name": item.get("name") or item.get("display_name") or model_id,
+                "created_at": item.get("created_at"),
+                "context_length": item.get("context_length")
+                or item.get("max_input_tokens"),
+            }
+        )
+    return models
+
+
 @app.get("/api/presets")
 def list_presets():
     return list_resource("api_presets")
+
+
+@app.post("/api/models/list")
+def list_upstream_models():
+    data = payload()
+    api_format = data.get("format", "anthropic")
+    if api_format not in {"anthropic", "openai"}:
+        return bad_request("format must be anthropic or openai.")
+    api_key = str(data.get("api_key") or "").strip()
+    if not api_key:
+        return bad_request("api_key is required.")
+    try:
+        url = model_list_url(data.get("endpoint"), api_format)
+    except ValueError as error:
+        return bad_request(str(error))
+    parsed = urlparse(url)
+    headers = {"Accept": "application/json"}
+    if api_format == "anthropic" and (parsed.hostname or "").endswith("anthropic.com"):
+        headers["x-api-key"] = api_key
+        headers["anthropic-version"] = "2023-06-01"
+    else:
+        headers["Authorization"] = f"Bearer {api_key}"
+        if api_format == "anthropic":
+            headers["anthropic-version"] = "2023-06-01"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(20.0, connect=10.0)) as client:
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
+            upstream = response.json()
+    except Exception as error:
+        return jsonify({"error": f"模型列表拉取失败：{error}"}), 502
+    return jsonify({"models": normalize_model_rows(upstream)})
 
 
 @app.post("/api/presets")
@@ -1770,6 +1995,28 @@ def regenerate_chat():
         return bad_request("message_id must be an integer.")
     try:
         context = load_regeneration_context(message_id)
+    except ChatSetupError as error:
+        return jsonify({"error": str(error)}), error.status_code
+    return Response(
+        stream_with_context(chat_events(context)),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.post("/api/chat/edit")
+def edit_chat_message():
+    data = payload()
+    try:
+        message_id = int(data.get("message_id"))
+    except (TypeError, ValueError):
+        return bad_request("message_id must be an integer.")
+    try:
+        context = load_edit_context(message_id, data.get("content"))
     except ChatSetupError as error:
         return jsonify({"error": str(error)}), error.status_code
     return Response(

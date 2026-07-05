@@ -172,6 +172,8 @@ def init_db():
         ON conversations(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
         ON messages(conversation_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_deleted_created
+        ON messages(deleted, created_at);
     CREATE INDEX IF NOT EXISTS idx_checkins_date
         ON checkins(date);
     CREATE INDEX IF NOT EXISTS idx_todos_done_due

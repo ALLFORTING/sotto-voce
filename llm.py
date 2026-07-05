@@ -456,6 +456,79 @@ def load_regeneration_context(message_id):
     }
 
 
+def load_edit_context(message_id, content):
+    content = str(content or "").strip()
+    if not content:
+        raise ChatSetupError("content is required.")
+    with connection() as conn:
+        target = conn.execute(
+            """
+            SELECT m.id, m.conversation_id, m.role, c.title
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.id = ? AND m.deleted = 0
+            """,
+            (message_id,),
+        ).fetchone()
+        if not target:
+            raise ChatSetupError("Message not found.", 404)
+        if target["role"] != "user":
+            raise ChatSetupError("Only user messages can be edited.", 400)
+        preset_row = conn.execute(
+            "SELECT * FROM api_presets WHERE active = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if not preset_row:
+            raise ChatSetupError("No active API preset is configured.", 409)
+        settings = {
+            row["key"]: row["value"] or ""
+            for row in conn.execute(
+                "SELECT key, value FROM settings WHERE key IN ('system_prompt', 'profile')"
+            ).fetchall()
+        }
+        edited_at = now_iso()
+        conn.execute(
+            "UPDATE messages SET content = ? WHERE id = ?",
+            (content, message_id),
+        )
+        conn.execute(
+            """
+            UPDATE messages SET deleted = 1
+            WHERE conversation_id = ? AND id > ?
+            """,
+            (target["conversation_id"], message_id),
+        )
+        conn.execute(
+            "UPDATE conversations SET updated_at = ?, archived = 0 WHERE id = ?",
+            (edited_at, target["conversation_id"]),
+        )
+        history = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT role, content, attachments, created_at
+                FROM messages
+                WHERE conversation_id = ? AND deleted = 0 AND id <= ?
+                ORDER BY created_at, id
+                """,
+                (target["conversation_id"], message_id),
+            ).fetchall()
+        ]
+        if not history or history[-1]["role"] != "user":
+            raise ChatSetupError("No editable user message exists.", 409)
+    system = "\n\n".join(
+        value.strip()
+        for value in (settings.get("system_prompt", ""), settings.get("profile", ""))
+        if value.strip()
+    )
+    return {
+        "conversation_id": target["conversation_id"],
+        "preset": dict(preset_row),
+        "system": system,
+        "history": history,
+        "conversation_title": target["title"],
+    }
+
+
 def strip_thinking_text(text: str) -> str:
     """去除文本中可能残留的 <thinking>...</thinking> 或 <think>...</think> 标签，只保留正式回复内容。"""
     if not text:
