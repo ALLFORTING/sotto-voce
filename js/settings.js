@@ -37,7 +37,7 @@ export function renderSettings() {
       <button class="settings-row" data-go="/settings/api"><span class="label">模型与接口</span><span class="val">${esc(activePreset?.name || "未配置")}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/mcp"><span class="label">MCP 服务</span><span class="val">${store.mcpServers.length} 个</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/terminal"><span class="label">终端</span><span class="val">VPS 命令行</span><span class="chev">${icon("chevR")}</span></button>
-      <button class="settings-row" data-go="/settings/export"><span class="label">对话导出</span><span class="val">聊天 / 批注</span><span class="chev">${icon("chevR")}</span></button>
+      <button class="settings-row" data-action="show-export-confirm"><span class="label">导出数据</span><span class="val"></span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/prompt"><span class="label">Prompt 配置</span><span class="val">${store.settings.system_prompt || store.settings.profile ? "已自定义" : "未填写"}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-action="change-token"><span class="label">访问令牌</span><span class="val">重新输入</span><span class="chev">${icon("chevR")}</span></button>
     </section>
@@ -62,58 +62,6 @@ export function renderTerminal() {
       <input class="term-input" type="text" placeholder="输入命令..." id="term-cmd-input">
       <button class="term-run" data-action="exec-command">运行</button>
     </div>
-  </main>`;
-  return phone({ activeTab: "set", hideTab: true, body });
-}
-
-export function renderExportSettings() {
-  const hasConversation = Boolean(store.conversationId);
-  const defaultScope = hasConversation ? "current" : "all";
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
-  const thirtyDaysAgo = new Date(Date.now() - 29 * 86400000).toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
-  const body = `<main class="page">
-    ${subpageTop("对话导出")}
-    <form id="export-form" class="export-form scroll">
-      <input type="hidden" name="conversation_id" value="${esc(store.conversationId || "")}">
-
-      <section class="export-section">
-        <div class="group-label">范围</div>
-        <label class="export-choice ${hasConversation ? "" : "disabled"}">
-          <input type="radio" name="scope" value="current" ${defaultScope === "current" ? "checked" : ""} ${hasConversation ? "" : "disabled"}>
-          <span>当前对话</span>
-        </label>
-        <label class="export-choice">
-          <input type="radio" name="scope" value="all" ${defaultScope === "all" ? "checked" : ""}>
-          <span>全部对话</span>
-        </label>
-        <p class="export-hint">批注导出始终包含全部书籍批注，不受对话范围影响。</p>
-      </section>
-
-      <section class="export-section">
-        <div class="group-label">内容</div>
-        <label class="export-choice"><input type="checkbox" name="content_types" value="chat" checked><span>聊天记录</span></label>
-        <label class="export-choice"><input type="checkbox" name="content_types" value="annotations" checked><span>伴读批注</span></label>
-      </section>
-
-      <section class="export-section">
-        <div class="group-label">时间</div>
-        <select class="export-select" name="date_range">
-          <option value="all">全部</option>
-          <option value="7d">最近 7 天</option>
-          <option value="30d">最近 30 天</option>
-          <option value="custom">自定义</option>
-        </select>
-        <div class="export-date-grid">
-          <label><span>开始</span><input type="date" name="start_date" value="${thirtyDaysAgo}"></label>
-          <label><span>结束</span><input type="date" name="end_date" value="${today}"></label>
-        </div>
-      </section>
-
-      <div class="export-actions">
-        <button class="primary" type="button" data-action="export-data" data-format="md">导出为 MD</button>
-        <button class="secondary" type="button" data-action="export-data" data-format="txt">导出为 TXT</button>
-      </div>
-    </form>
   </main>`;
   return phone({ activeTab: "set", hideTab: true, body });
 }

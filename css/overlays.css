@@ -194,6 +194,52 @@
   color: var(--danger);
 }
 
+.confirm-dialog {
+  position: absolute;
+  z-index: 9;
+  left: 32px;
+  right: 32px;
+  top: 50%;
+  padding: 22px 20px 16px;
+  border-radius: 20px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-menu);
+  transform: translateY(-50%);
+  animation: overlay-in 160ms ease-out;
+}
+
+.confirm-text {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.confirm-actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+
+.confirm-actions button {
+  flex: 1;
+  min-height: 38px;
+  border-radius: 19px;
+  font-size: 13.5px;
+  letter-spacing: 1px;
+}
+
+.confirm-actions .cancel {
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+
+.confirm-actions .ok {
+  background: var(--text);
+  color: var(--bg);
+}
+
 .edit-sheet-scrim {
   background: var(--scrim-sheet);
 }

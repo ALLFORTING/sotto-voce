@@ -47,7 +47,6 @@ import { renderMemory } from "./memory.js";
 import {
   renderAnniversaries,
   renderApiSettings,
-  renderExportSettings,
   renderMcpSettings,
   renderPrompt,
   renderSettings,
@@ -260,7 +259,6 @@ function renderRoute(path) {
   if (path === "/settings/api") return renderApiSettings();
   if (path === "/settings/mcp") return renderMcpSettings();
   if (path === "/settings/terminal") return renderTerminal();
-  if (path === "/settings/export") return renderExportSettings();
   if (path === "/settings/anniv") return renderAnniversaries();
   if (path === "/chat/search") return renderSearchPage();
   return renderHome();
@@ -698,24 +696,33 @@ document.addEventListener("click", async (event) => {
       store.terminalHistory = store.terminalHistory.slice(0, 50);
       return render(renderTerminal());
     }
-    if (action === "export-data") {
-      const form = document.querySelector("#export-form");
-      if (!form) return;
-      const data = formValue(form);
-      const contentTypes = [...form.querySelectorAll('input[name="content_types"]:checked')]
-        .map((item) => item.value);
-      if (!contentTypes.length) {
-        toast("请选择要导出的内容");
-        return;
+    if (action === "show-export-confirm") {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) {
+        overlay.innerHTML = `<div class="overlay-scrim" data-action="cancel-export"></div>
+          <section class="confirm-dialog">
+            <div class="confirm-text">确认导出所有聊天记录和伴读内容？</div>
+            <div class="confirm-actions">
+              <button class="cancel" data-action="cancel-export">取消</button>
+              <button class="ok" data-action="confirm-export">确认</button>
+            </div>
+          </section>`;
       }
+      return;
+    }
+    if (action === "cancel-export") {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      return;
+    }
+    if (action === "confirm-export") {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
       await api.downloadExport({
-        scope: data.scope || "current",
-        conversation_id: Number(data.conversation_id || store.conversationId || 0) || null,
-        content_types: contentTypes,
-        date_range: data.date_range || "all",
-        start_date: data.start_date || "",
-        end_date: data.end_date || "",
-        format: actionEl?.dataset.format || "md"
+        scope: "all",
+        content_types: ["chat", "annotations"],
+        date_range: "all",
+        format: "md"
       });
       toast("导出已开始");
       return;
