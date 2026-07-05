@@ -609,10 +609,15 @@ def generate_home_summary(conversation_id):
         for item in reversed(messages)
     )
     prompt = (
-        "把下面最近一段对话概括成不超过60个中文字符的一句纯文本。"
-        "只写聊到的事情，不要标题、引号、Markdown符号或解释。\n" + transcript
+        "把下面最近一段对话概括成首页卡片摘要。\n"
+        "硬性要求：\n"
+        "- 严格控制在50个中文字符以内，超出会被截断\n"
+        "- 只保留最核心的一件事\n"
+        "- 写成一句自然完整的话\n"
+        "- 不要标题、引号、Markdown符号或解释\n"
+        + transcript
     )
-    summary = natural_summary_text(short_completion(dict(preset), prompt, 150), 60)
+    summary = natural_summary_text(short_completion(dict(preset), prompt, 80), 60)
     if summary:
         with connection() as conn:
             conn.execute(
