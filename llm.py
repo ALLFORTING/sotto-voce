@@ -333,7 +333,7 @@ def load_chat_context(conversation_id, content, attachments):
             ).fetchall()
         }
         created_at = now_iso()
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO messages(
                 conversation_id, role, content, attachments, created_at
@@ -341,6 +341,7 @@ def load_chat_context(conversation_id, content, attachments):
             """,
             (conversation_id, content, serialized_attachments, created_at),
         )
+        user_message_id = cursor.lastrowid
         conn.execute(
             "UPDATE conversations SET updated_at = ?, archived = 0 WHERE id = ?",
             (created_at, conversation_id),
@@ -394,6 +395,7 @@ def load_chat_context(conversation_id, content, attachments):
         "system": system,
         "history": history,
         "conversation_title": conversation["title"],
+        "user_message_id": user_message_id,
     }
 
 
@@ -1111,6 +1113,8 @@ def chat_events(context):
     final_result = StreamResult()
     started_at = time.monotonic()
     try:
+        if context.get("user_message_id"):
+            yield sse("user_saved", {"message_id": context["user_message_id"]})
         with httpx.Client(timeout=httpx.Timeout(120.0, connect=20.0)) as client:
             for round_number in range(MAX_TOOL_ROUNDS + 1):
                 url, body = request_payload(context, tools, extra_messages)

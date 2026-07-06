@@ -98,9 +98,10 @@ function presetForm(preset = {}) {
   const optionRows = model && !modelOptions.some((item) => item.id === model)
     ? [{ id: model, name: model }, ...modelOptions]
     : modelOptions;
+  const selectedModel = optionRows.find((item) => item.id === model);
   const modelField = manualModel
     ? `<input name="model" value="${esc(model)}" required>`
-    : `<select name="model" required>${optionRows.map((item) => `<option value="${esc(item.id)}" ${item.id === model ? "selected" : ""}>${esc(item.name || item.id)}</option>`).join("")}</select>`;
+    : `<input type="hidden" name="model" value="${esc(model || optionRows[0]?.id || "")}"><button class="model-select" type="button" data-action="open-model-picker" data-key-id="${key}"><span>${esc(selectedModel?.name || selectedModel?.id || optionRows[0]?.name || optionRows[0]?.id || "选择模型")}</span>${icon("chevD")}</button>`;
   const modelError = store.modelOptionErrors[key]
     ? `<div class="model-error">${esc(store.modelOptionErrors[key])}</div>`
     : "";

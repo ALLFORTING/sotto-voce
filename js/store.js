@@ -1,4 +1,4 @@
-export const VERSION = "cheng-v128";
+export const VERSION = "cheng-v130";
 
 const readJson = (key, fallback) => {
   try {
@@ -91,6 +91,8 @@ export const store = {
   modelManualModels: {},
   modelOptionErrors: {},
   modelLoading: null,
+  modelPicker: null,
+  modelFilter: "",
   bucketEdit: null,
   loading: false,
   error: ""

@@ -60,6 +60,7 @@ let longPressTimer = 0;
 let longPressStart = null;
 let suppressBookCardClick = false;
 let searchCalendarY0 = null;
+let jumpClearTimer = 0;
 
 const CACHE_MS = {
   home: 5 * 60_000,
@@ -243,6 +244,30 @@ function rememberPresetDraft(form) {
   return data;
 }
 
+function renderModelPicker() {
+  const picker = store.modelPicker;
+  if (!picker) return "";
+  const options = store.modelOptions[picker.key] || [];
+  const query = String(store.modelFilter || "").trim().toLowerCase();
+  const filtered = options.filter((item) =>
+    `${item.id || ""} ${item.name || ""}`.toLowerCase().includes(query)
+  );
+  return `<div class="overlay-scrim" data-action="close-model-picker"></div>
+    <section class="model-picker">
+      <div class="model-picker-head">
+        <div><strong>选择模型</strong><span>${filtered.length} / ${options.length}</span></div>
+        <button data-action="close-model-picker">×</button>
+      </div>
+      <input class="model-filter" id="model-filter" value="${esc(store.modelFilter || "")}" placeholder="搜索模型名称">
+      <div class="model-list">
+        ${filtered.map((item) => `<button data-action="choose-model" data-key-id="${picker.key}" data-model-id="${esc(item.id)}">
+          <span>${esc(item.name || item.id)}</span>
+          <em>${esc(item.id)}</em>
+        </button>`).join("") || `<div class="model-empty">没有匹配的模型</div>`}
+      </div>
+    </section>`;
+}
+
 async function loadTerminalHistory() {
   store.terminalHistory = await api.get("/api/terminal/history");
 }
@@ -381,6 +406,18 @@ function searchDateLabel(value) {
   return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, "0")}月`;
 }
 
+function mediaGroupLabel(value) {
+  const date = chinaDate(value);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  if (day >= weekStart) return "本周";
+  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()) return "本月";
+  return "更早";
+}
+
 function searchTime(value) {
   const date = chinaDate(value);
   return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -394,10 +431,20 @@ function searchPreview(item) {
   return "（空消息）";
 }
 
+function mediaTiles(items) {
+  return items.flatMap((item) => (item.attachments || []).map((file) => ({
+    messageId: item.id,
+    conversationId: item.conversation_id,
+    conversationTitle: item.conversation_title || "新对话",
+    createdAt: item.created_at,
+    file
+  })));
+}
+
 function groupedMediaRows(items) {
   const groups = [];
-  for (const item of items) {
-    const label = searchDateLabel(item.created_at);
+  for (const item of mediaTiles(items)) {
+    const label = mediaGroupLabel(item.createdAt);
     let group = groups[groups.length - 1];
     if (!group || group.label !== label) {
       group = { label, items: [] };
@@ -407,10 +454,16 @@ function groupedMediaRows(items) {
   }
   return groups.map((group) => `<section class="search-section">
     <div class="search-section-title">${esc(group.label)}</div>
-    ${group.items.map((item) => `<button class="search-result media" data-search-message="${item.id}" data-search-conversation="${item.conversation_id}">
-      <span class="top"><span class="who">${esc(item.conversation_title || "新对话")}</span><span>${searchTime(item.created_at)}</span></span>
-      <span class="body">${(item.attachments || []).map((file) => `[${file.type === "image" ? "图片" : "文件"}: ${esc(file.name || "附件")}]`).join(" ")}</span>
-    </button>`).join("")}
+    <div class="media-grid">
+      ${group.items.map((item) => {
+        const file = item.file || {};
+        const isImage = file.type === "image" || String(file.mime_type || "").startsWith("image/");
+        return `<button class="media-tile ${isImage ? "image" : "file"}" ${isImage ? `data-action="open-media-preview" data-src="${esc(file.path || "")}" data-name="${esc(file.name || "图片")}"` : ""} data-search-message="${item.messageId}" data-search-conversation="${item.conversationId}">
+          ${isImage ? `<img src="${esc(file.path || "")}" alt="${esc(file.name || "图片")}" loading="lazy">` : `<span class="file-ico">${icon("file")}</span><span class="file-name">${esc(file.name || "附件")}</span>`}
+          <span class="media-meta">${esc(item.conversationTitle)} · ${searchTime(item.createdAt)}</span>
+        </button>`;
+      }).join("")}
+    </div>
   </section>`).join("");
 }
 
@@ -462,8 +515,8 @@ function renderSearchPage() {
   }
   const body = `<main class="page">
     ${subpageTop("搜索聊天")}
-    <form id="chat-search-form" class="search-bar"><input name="q" value="${esc(store.searchQuery || "")}" placeholder="搜索聊天"></form>
-    <div class="filter-row"><button class="chip" data-action="search-media" data-kind="file">文件</button><button class="chip" data-action="search-media" data-kind="image">图片</button><button class="chip" data-action="search-date-mode">日期</button></div>
+    <form id="chat-search-form" class="chat-search-form"><input name="q" value="${esc(store.searchQuery || "")}" placeholder="搜索聊天"></form>
+    <div class="chat-filter-row"><button class="chip" data-action="search-media" data-kind="file">文件</button><button class="chip" data-action="search-media" data-kind="image">图片</button><button class="chip" data-action="search-date-mode">日期</button></div>
     <section class="scroll" id="search-results">${rows || '<div class="loading-text">输入关键词后回车搜索。</div>'}</section>
   </main>`;
   return phone({ activeTab: "chat", hideTab: true, body });
@@ -474,21 +527,29 @@ async function loadSearchMonth(month = store.searchMonth) {
   store.searchMonthDays = await api.get(`/api/search?type=dates&month=${encodeURIComponent(month)}`);
 }
 
-function schedulePendingMessageJump() {
+function schedulePendingMessageJump(attempt = 0) {
   const id = store.pendingJumpMessageId;
   if (!id) return scrollChat();
   const target = document.querySelector(`[data-message-id="${id}"]`);
   if (!target) {
-    store.pendingJumpMessageId = null;
-    return scrollChat();
+    if (attempt < 8) setTimeout(() => schedulePendingMessageJump(attempt + 1), 80);
+    else {
+      store.pendingJumpMessageId = null;
+      scrollChat();
+      toast("没有找到这条消息");
+    }
+    return;
   }
   target.scrollIntoView({ block: "center" });
   target.classList.add("jump-highlight");
-  store.pendingJumpMessageId = null;
-  setTimeout(() => target.classList.remove("jump-highlight"), 1800);
+  clearTimeout(jumpClearTimer);
+  jumpClearTimer = setTimeout(() => {
+    target.classList.remove("jump-highlight");
+    if (store.pendingJumpMessageId === id) store.pendingJumpMessageId = null;
+  }, 1800);
 }
 
-async function jumpToChatMessage(conversationId, messageId) {
+async function scrollToMessage(conversationId, messageId) {
   store.pendingJumpMessageId = Number(messageId);
   rememberConversation(Number(conversationId));
   await loadMessages(true);
@@ -540,6 +601,7 @@ async function sendMessage(content, attachments = [], options = {}) {
   const regenerating = Boolean(options.messageId);
   const editing = Boolean(options.editMessageId);
   if (!regenerating && !editing && !store.conversationId) await createConversation();
+  let userMessage = null;
   const assistant = {
     role: "assistant",
     content: "",
@@ -553,12 +615,13 @@ async function sendMessage(content, attachments = [], options = {}) {
   if (regenerating || editing) {
     store.messages.splice(options.index, 0, assistant);
   } else {
-    store.messages.push({
+    userMessage = {
       role: "user",
       content,
       attachments,
       created_at: new Date().toISOString()
-    }, assistant);
+    };
+    store.messages.push(userMessage, assistant);
   }
   cacheMessages(store.conversationId, store.messages);
   render(renderChat());
@@ -624,6 +687,12 @@ async function sendMessage(content, attachments = [], options = {}) {
           ? { message_id: options.messageId }
           : { conversation_id: store.conversationId, content, attachments },
       (event, data) => {
+        if (event === "user_saved" && userMessage && data.message_id) {
+          userMessage.id = data.message_id;
+          cacheMessages(store.conversationId, store.messages);
+          const index = store.messages.indexOf(userMessage);
+          document.querySelector(`[data-message-index="${index}"]`)?.setAttribute("data-message-id", String(data.message_id));
+        }
         if (event === "thinking_start") {
           pending.sawThinking = true;
           pending.thinkingEnded = false;
@@ -681,8 +750,37 @@ function dismissLongPress() {
   if (overlay) overlay.innerHTML = "";
 }
 
+function showConversationRenameDialog(item) {
+  const overlay = document.querySelector(".phone-overlay-layer");
+  if (!overlay) return;
+  overlay.innerHTML = `<div class="overlay-scrim" data-action="close-dialog"></div>
+    <section class="app-dialog rename-dialog">
+      <div class="dialog-title">重命名会话</div>
+      <input id="conversation-rename-input" value="${esc(item.title || "")}" placeholder="会话名称">
+      <div class="dialog-actions">
+        <button class="cancel" data-action="close-dialog">取消</button>
+        <button class="ok" data-action="confirm-conversation-rename" data-conversation-id="${item.id}">保存</button>
+      </div>
+    </section>`;
+  requestAnimationFrame(() => document.querySelector("#conversation-rename-input")?.focus());
+}
+
+function showConversationDeleteDialog(item) {
+  const overlay = document.querySelector(".phone-overlay-layer");
+  if (!overlay) return;
+  overlay.innerHTML = `<div class="overlay-scrim" data-action="close-dialog"></div>
+    <section class="app-dialog">
+      <div class="dialog-title">删除这个会话？</div>
+      <div class="dialog-text">删除后不会再显示在侧边栏。</div>
+      <div class="dialog-actions">
+        <button class="cancel" data-action="close-dialog">取消</button>
+        <button class="ok danger" data-action="confirm-conversation-delete" data-conversation-id="${item.id}">删除</button>
+      </div>
+    </section>`;
+}
+
 document.addEventListener("pointerdown", (event) => {
-  const message = event.target.closest(".msg-row[data-message-id]");
+  const message = event.target.closest(".msg-row[data-message-index]");
   const conversation = event.target.closest(".drawer-item");
   const bookCard = event.target.closest(".cv2-book");
   const annoBlock = event.target.closest(".anno-block");
@@ -694,13 +792,24 @@ document.addEventListener("pointerdown", (event) => {
     if (message) {
       message.classList.add("long-press-active");
       const rect = message.getBoundingClientRect();
-      const id = Number(message.dataset.messageId);
-      const target = store.messages.find((item) => item.id === id);
+      const layerRect = document.querySelector(".phone-overlay-layer")?.getBoundingClientRect() || { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+      const id = Number(message.dataset.messageId || 0);
+      const index = Number(message.dataset.messageIndex ?? -1);
+      const target = (id && store.messages.find((item) => item.id === id)) || store.messages[index];
       store.longPress = {
-        id,
+        id: target?.id || id || null,
+        index,
         role: message.dataset.role,
         starred: Boolean(target?.starred),
-        rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width }
+        persisted: Boolean(target?.id || id),
+        rect: {
+          left: rect.left - layerRect.left,
+          top: rect.top - layerRect.top,
+          bottom: rect.bottom - layerRect.top,
+          width: rect.width,
+          height: rect.height
+        },
+        viewport: { width: layerRect.width, height: layerRect.height }
       };
     }
     if (conversation) {
@@ -865,6 +974,58 @@ document.addEventListener("click", async (event) => {
       clearToken();
       return render(tokenGate("请输入新的访问令牌。"));
     }
+    if (action === "open-media-preview") {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) {
+        overlay.innerHTML = `<div class="overlay-scrim" data-action="close-media-preview"></div>
+          <section class="media-preview">
+            <button class="close" data-action="close-media-preview">×</button>
+            <img src="${esc(actionEl.dataset.src || "")}" alt="${esc(actionEl.dataset.name || "图片")}">
+            <div class="bar">
+              <span>${esc(actionEl.dataset.name || "图片")}</span>
+              <button data-search-conversation="${esc(actionEl.dataset.searchConversation || "")}" data-search-message="${esc(actionEl.dataset.searchMessage || "")}">定位到聊天</button>
+            </div>
+          </section>`;
+      }
+      return;
+    }
+    if (action === "close-media-preview") {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      return;
+    }
+    if (action === "close-dialog") {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = store.drawerOpen ? renderDrawer() : "";
+      store.longPress = null;
+      document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+      return;
+    }
+    if (action === "confirm-conversation-rename") {
+      const conversationId = Number(actionEl.dataset.conversationId || 0);
+      const title = String(document.querySelector("#conversation-rename-input")?.value || "").trim();
+      if (!conversationId || !title) return;
+      await api.patch(`/api/conversations/${conversationId}`, { title });
+      await loadConversations(true);
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = renderDrawer();
+      store.longPress = null;
+      toast("已重命名");
+      return;
+    }
+    if (action === "confirm-conversation-delete") {
+      const conversationId = Number(actionEl.dataset.conversationId || 0);
+      if (!conversationId) return;
+      await api.delete(`/api/conversations/${conversationId}`);
+      if (store.conversationId === conversationId) rememberConversation(null);
+      await loadConversations(true);
+      await loadMessages(true);
+      store.longPress = null;
+      store.drawerOpen = true;
+      render(renderChat());
+      toast("已删除");
+      return;
+    }
     if (action === "search-media") {
       const kind = actionEl?.dataset.kind;
       if (!["image", "file"].includes(kind)) return;
@@ -914,6 +1075,37 @@ document.addEventListener("click", async (event) => {
       if (form) rememberPresetDraft(form);
       const key = actionEl.dataset.keyId || "new";
       store.modelManualModels[key] = !store.modelManualModels[key];
+      return render(renderApiSettings());
+    }
+    if (action === "open-model-picker") {
+      const form = actionEl.closest("[data-preset-form]");
+      if (form) rememberPresetDraft(form);
+      store.modelPicker = { key: actionEl.dataset.keyId || "new" };
+      store.modelFilter = "";
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = renderModelPicker();
+      return;
+    }
+    if (action === "close-model-picker") {
+      store.modelPicker = null;
+      store.modelFilter = "";
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      return;
+    }
+    if (action === "choose-model") {
+      const key = actionEl.dataset.keyId || "new";
+      const modelId = actionEl.dataset.modelId || "";
+      if (key === "new") {
+        store.newPresetDraft = { ...(store.newPresetDraft || {}), model: modelId };
+      } else {
+        const preset = store.presets.find((item) => String(item.id) === key);
+        if (preset) preset.model = modelId;
+      }
+      store.modelPicker = null;
+      store.modelFilter = "";
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
       return render(renderApiSettings());
     }
     if (action === "exec-command") {
@@ -1154,39 +1346,57 @@ document.addEventListener("click", async (event) => {
   const searchConversationId = event.target.closest("[data-search-conversation]")?.dataset.searchConversation;
   const searchMessageId = event.target.closest("[data-search-message]")?.dataset.searchMessage;
   if (searchConversationId && searchMessageId) {
-    return jumpToChatMessage(searchConversationId, searchMessageId);
+    try {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      return await scrollToMessage(searchConversationId, searchMessageId);
+    } catch (error) {
+      return toast(error.message);
+    }
   }
   const searchGroupId = event.target.closest("[data-search-group]")?.dataset.searchGroup;
   if (searchGroupId) {
-    store.searchDetail = await api.get(`/api/search?type=keyword_detail&q=${encodeURIComponent(store.searchQuery)}&conversation_id=${encodeURIComponent(searchGroupId)}`);
-    const group = store.searchGroups.find((item) => Number(item.conversation_id) === Number(searchGroupId));
-    store.searchConversationTitle = group?.conversation_title || "聊天记录";
-    store.searchMode = "keyword-detail";
-    return render(renderSearchPage());
+    try {
+      store.searchDetail = await api.get(`/api/search?type=keyword_detail&q=${encodeURIComponent(store.searchQuery)}&conversation_id=${encodeURIComponent(searchGroupId)}`);
+      const group = store.searchGroups.find((item) => Number(item.conversation_id) === Number(searchGroupId));
+      store.searchConversationTitle = group?.conversation_title || "聊天记录";
+      store.searchMode = "keyword-detail";
+      return render(renderSearchPage());
+    } catch (error) {
+      return toast(error.message);
+    }
   }
   const searchDay = event.target.closest("[data-search-day]")?.dataset.searchDay;
   if (searchDay) {
-    const groups = await api.get(`/api/search?type=date&date=${encodeURIComponent(searchDay)}`);
-    if (!groups.length) return toast("这一天没有聊天记录");
-    if (groups.length === 1) return jumpToChatMessage(groups[0].conversation_id, groups[0].message_id);
-    store.searchDateGroups = groups;
-    const overlay = document.querySelector(".phone-overlay-layer");
-    if (overlay) {
-      overlay.innerHTML = `<div class="overlay-scrim" data-action="close-overlay"></div>
-        <section class="search-choice-panel">
-          <div class="title">选择对话</div>
-          ${groups.map((item) => `<button data-date-conversation="${item.conversation_id}" data-message-id="${item.message_id}">
-            <span>${esc(item.conversation_title || "新对话")}</span><em>${item.count} 条</em>
-          </button>`).join("")}
-        </section>`;
+    try {
+      const groups = await api.get(`/api/search?type=date&date=${encodeURIComponent(searchDay)}`);
+      if (!groups.length) return toast("这一天没有聊天记录");
+      if (groups.length === 1) return await scrollToMessage(groups[0].conversation_id, groups[0].message_id);
+      store.searchDateGroups = groups;
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) {
+        overlay.innerHTML = `<div class="overlay-scrim" data-action="close-overlay"></div>
+          <section class="search-choice-panel">
+            <div class="title">选择对话</div>
+            ${groups.map((item) => `<button data-date-conversation="${item.conversation_id}" data-message-id="${item.message_id}">
+              <span>${esc(item.conversation_title || "新对话")}</span><em>${item.count} 条</em>
+            </button>`).join("")}
+          </section>`;
+      }
+      return;
+    } catch (error) {
+      return toast(error.message);
     }
-    return;
   }
   const dateConversation = event.target.closest("[data-date-conversation]");
   if (dateConversation) {
-    const overlay = document.querySelector(".phone-overlay-layer");
-    if (overlay) overlay.innerHTML = "";
-    return jumpToChatMessage(dateConversation.dataset.dateConversation, dateConversation.dataset.messageId);
+    try {
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      return await scrollToMessage(dateConversation.dataset.dateConversation, dateConversation.dataset.messageId);
+    } catch (error) {
+      return toast(error.message);
+    }
   }
   const domain = event.target.closest("[data-domain]")?.dataset.domain;
   if (domain) {
@@ -1247,6 +1457,18 @@ document.addEventListener("input", (event) => {
   if (event.target.matches("#memory-search")) {
     store.memoryQuery = event.target.value;
     render(renderMemory(route() === "/memory/archive" ? "archive" : "bucket"));
+  }
+  if (event.target.matches("#model-filter")) {
+    store.modelFilter = event.target.value;
+    const overlay = document.querySelector(".phone-overlay-layer");
+    if (overlay) overlay.innerHTML = renderModelPicker();
+    requestAnimationFrame(() => {
+      const input = document.querySelector("#model-filter");
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    });
   }
 });
 
@@ -1354,11 +1576,15 @@ document.addEventListener("contextmenu", (event) => {
 });
 
 async function handleMessageAction(action) {
-  const target = store.messages.find((item) => item.id === store.longPress?.id);
+  const target = store.messages.find((item) => item.id === store.longPress?.id) || store.messages[store.longPress?.index];
   if (!target) return;
   if (action === "copy") {
     await navigator.clipboard.writeText(target.content || "");
     toast("已复制");
+    return dismissLongPress();
+  }
+  if (!target.id) {
+    toast("消息保存后才能操作");
     return dismissLongPress();
   }
   if (action === "star") {
@@ -1404,17 +1630,16 @@ async function handleConversationAction(action) {
   const item = store.conversations.find((entry) => entry.id === id);
   if (!item) return;
   if (action === "rename") {
-    const title = prompt("重命名会话", item.title);
-    if (title?.trim()) {
-      await api.patch(`/api/conversations/${id}`, { title: title.trim() });
-      await loadConversations(true);
-    }
+    showConversationRenameDialog(item);
     store.longPress = null;
-    return render(renderChat());
+    document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+    return;
   }
-  if (action === "delete" && confirm("删除这个会话？")) {
-    await api.delete(`/api/conversations/${id}`);
-    if (store.conversationId === id) rememberConversation(null);
+  if (action === "delete") {
+    showConversationDeleteDialog(item);
+    store.longPress = null;
+    document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+    return;
   }
   store.longPress = null;
   await loadConversations(true);
@@ -1439,7 +1664,7 @@ if ("serviceWorker" in navigator) {
 }
 
 document.addEventListener("touchmove", (event) => {
-  if (!event.target.closest(".scroll, .chat-stream, .drawer-list, .es-body, .home-page, .jnl-scroll, .book-list, .reader-body")) {
+  if (!event.target.closest(".scroll, .chat-stream, .drawer-list, .es-body, .home-page, .jnl-scroll, .book-list, .reader-body, .model-list")) {
     event.preventDefault();
   }
 }, { passive: false });

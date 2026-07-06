@@ -298,14 +298,17 @@ export function renderLongPressMenu() {
       </section>`;
   }
   const rect = store.longPress.rect || { left: 28, top: 260, bottom: 320, width: 220 };
+  const viewport = store.longPress.viewport || { width: 393, height: 750 };
   const left = store.longPress.role === "assistant"
-    ? Math.max(18, rect.left)
-    : Math.max(18, Math.min(393 - 212, rect.left + rect.width - 184));
-  const menuHeight = 180;
-  const maxBottom = 750;
-  const top = (rect.bottom + 8 + menuHeight > maxBottom)
-    ? Math.max(8, rect.top - menuHeight)
-    : Math.min(maxBottom - menuHeight, rect.bottom + 8);
+    ? Math.max(18, Math.min(viewport.width - 202, rect.left))
+    : Math.max(18, Math.min(viewport.width - 202, rect.left + rect.width - 184));
+  const menuItems = store.longPress.menuItems || 4;
+  const menuHeight = 4 + menuItems * 44 + Math.max(0, menuItems - 1) + 8;
+  const margin = 8;
+  const below = rect.bottom + margin;
+  const top = below + menuHeight <= viewport.height - margin
+    ? below
+    : Math.max(margin, rect.top - menuHeight - margin);
   const ai = store.longPress.role === "assistant";
   return `<div class="overlay-scrim chat-only" data-action="close-overlay"></div>
     <section class="long-press-menu" style="left:${left}px;top:${top}px">
