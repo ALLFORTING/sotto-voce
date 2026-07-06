@@ -61,7 +61,6 @@ let longPressStart = null;
 let suppressBookCardClick = false;
 let jumpClearTimer = 0;
 const SEARCH_CALENDAR_START = "2026-01";
-const SEARCH_CALENDAR_MONTHS = 12;
 
 const CACHE_MS = {
   home: 5 * 60_000,
@@ -427,7 +426,11 @@ function monthLabel(month) {
 }
 
 function searchTimelineMonths() {
-  return Array.from({ length: SEARCH_CALENDAR_MONTHS }, (_, index) => shiftMonth(SEARCH_CALENDAR_START, index));
+  const [startYear, startMonth] = SEARCH_CALENDAR_START.split("-").map(Number);
+  const [endYear, endMonth] = monthKey().split("-").map(Number);
+  const diff = (endYear - startYear) * 12 + (endMonth - startMonth);
+  const count = Math.max(1, diff + 1);
+  return Array.from({ length: count }, (_, index) => shiftMonth(SEARCH_CALENDAR_START, index));
 }
 
 function searchDateLabel(value) {
