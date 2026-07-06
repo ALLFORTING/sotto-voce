@@ -823,10 +823,38 @@ function dismissLongPress() {
   if (overlay) overlay.innerHTML = "";
 }
 
+function closeAppDialog() {
+  const overlay = document.querySelector(".phone-overlay-layer");
+  if (!overlay) return;
+  overlay.querySelectorAll(".app-dialog-scrim, .app-dialog").forEach((node) => node.remove());
+}
+
+function removeLongPressMenuDom() {
+  const overlay = document.querySelector(".phone-overlay-layer");
+  if (!overlay) return;
+  overlay.querySelectorAll(".long-press-menu, .overlay-scrim:not(.app-dialog-scrim)").forEach((node) => node.remove());
+}
+
+function refreshDrawerDom() {
+  const overlay = document.querySelector(".phone-overlay-layer");
+  if (!overlay) return;
+  const drawer = overlay.querySelector(".drawer");
+  if (!drawer) {
+    overlay.insertAdjacentHTML("afterbegin", renderDrawer());
+    return;
+  }
+  const template = document.createElement("template");
+  template.innerHTML = renderDrawer();
+  const nextList = template.content.querySelector(".drawer-list");
+  const currentList = drawer.querySelector(".drawer-list");
+  if (currentList && nextList) currentList.innerHTML = nextList.innerHTML;
+}
+
 function showAppDialog(html) {
   const overlay = document.querySelector(".phone-overlay-layer");
   if (!overlay) return;
-  overlay.innerHTML = `${store.drawerOpen ? renderDrawer() : ""}<div class="overlay-scrim app-dialog-scrim" data-action="close-dialog"></div>${html}`;
+  closeAppDialog();
+  overlay.insertAdjacentHTML("beforeend", `<div class="overlay-scrim app-dialog-scrim" data-action="close-dialog"></div>${html}`);
 }
 
 function showConversationRenameDialog(item) {
@@ -1125,8 +1153,7 @@ document.addEventListener("click", async (event) => {
       return;
     }
     if (action === "close-dialog") {
-      const overlay = document.querySelector(".phone-overlay-layer");
-      if (overlay) overlay.innerHTML = store.drawerOpen ? renderDrawer() : "";
+      closeAppDialog();
       store.longPress = null;
       clearLongPressActive();
       return;
@@ -1158,8 +1185,8 @@ document.addEventListener("click", async (event) => {
       if (!conversationId || !title) return;
       await api.patch(`/api/conversations/${conversationId}`, { title });
       await loadConversations(true);
-      const overlay = document.querySelector(".phone-overlay-layer");
-      if (overlay) overlay.innerHTML = renderDrawer();
+      closeAppDialog();
+      refreshDrawerDom();
       store.longPress = null;
       toast("已重命名");
       return;
@@ -1178,7 +1205,8 @@ document.addEventListener("click", async (event) => {
       store.longPress = null;
       store.drawerOpen = true;
       clearLongPressActive();
-      render(renderChat());
+      closeAppDialog();
+      refreshDrawerDom();
       toast("已删除");
       return;
     }
@@ -1784,15 +1812,17 @@ async function handleConversationAction(action) {
   const item = store.conversations.find((entry) => entry.id === id);
   if (!item) return;
   if (action === "rename") {
-    showConversationRenameDialog(item);
+    removeLongPressMenuDom();
     store.longPress = null;
     clearLongPressActive();
+    showConversationRenameDialog(item);
     return;
   }
   if (action === "delete") {
-    showConversationDeleteDialog(item);
+    removeLongPressMenuDom();
     store.longPress = null;
     clearLongPressActive();
+    showConversationDeleteDialog(item);
     return;
   }
   store.longPress = null;
