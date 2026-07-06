@@ -414,12 +414,28 @@ export function appendStreamText(message, text) {
   });
 }
 
-export function updateThoughtDom(row, message) {
+function thoughtRenderKey(message, final = false) {
+  const hasText = Boolean(String(message.thinking || "").trim());
+  return [
+    final ? "final" : "stream",
+    message.thinkingStarted ? "thinking" : "done",
+    hasText ? "text" : "empty",
+    message.thinkingOpen ? "open" : "closed",
+    message.thinkingOpen ? String(message.thinking || "").length : 0,
+    Number(message.thinking_seconds || 0).toFixed(1),
+    (message.tools || []).length
+  ].join(":");
+}
+
+export function updateThoughtDom(row, message, options = {}) {
   if (!row) return;
+  const key = thoughtRenderKey(message, options.final);
+  if (!options.force && row.dataset.thoughtKey === key) return;
   row.querySelector(".thought")?.remove();
   row.querySelector(".thought-expanded")?.remove();
   const html = thoughtHtml(message);
   if (html) row.insertAdjacentHTML("afterbegin", html);
+  row.dataset.thoughtKey = key;
 }
 
 export function updateStreamMeta(message, final = false) {
@@ -429,7 +445,7 @@ export function updateStreamMeta(message, final = false) {
     article.classList.remove("streaming");
     message.thinkingOpen = false;
     if (message.id) article.dataset.messageId = message.id;
-    updateThoughtDom(article, message);
+    updateThoughtDom(article, message, { final: true, force: true });
     if (group) group.innerHTML = aiBubblesHtml(message);
     else if (bubble) bubble.outerHTML = messageBubbleHtml({ role: "ai", text: message.content, message, tail: true });
   } else {

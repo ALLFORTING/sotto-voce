@@ -60,6 +60,7 @@ let longPressTimer = 0;
 let longPressStart = null;
 let suppressBookCardClick = false;
 let jumpClearTimer = 0;
+let quickDialogSubmitting = false;
 const SEARCH_CALENDAR_START = "2026-01";
 
 const CACHE_MS = {
@@ -881,6 +882,7 @@ function showConversationDeleteDialog(item) {
 }
 
 function showJournalInputDialog(type) {
+  quickDialogSubmitting = false;
   const todo = type === "todo";
   const title = todo ? "新增待办" : "新增里程碑";
   const placeholder = todo ? "写下今天要做的事…" : "写下这一刻的里程碑…";
@@ -1153,30 +1155,57 @@ document.addEventListener("click", async (event) => {
       return;
     }
     if (action === "close-dialog") {
+      quickDialogSubmitting = false;
       closeAppDialog();
       store.longPress = null;
       clearLongPressActive();
       return;
     }
     if (action === "confirm-quick-todo") {
+      if (quickDialogSubmitting) return;
       const content = String(document.querySelector("#journal-quick-input")?.value || "").trim();
       if (!content) return toast("待办不能为空");
-      await api.post("/api/todos", { content, due_date: store.calendarSelectedDate });
-      await loadCalendar(true);
-      await loadHome(true);
-      const overlay = document.querySelector(".phone-overlay-layer");
-      if (overlay) overlay.innerHTML = "";
-      render(renderCalendar());
+      quickDialogSubmitting = true;
+      actionEl.disabled = true;
+      const originalText = actionEl.textContent;
+      actionEl.textContent = "保存中";
+      try {
+        await api.post("/api/todos", { content, due_date: store.calendarSelectedDate });
+        await loadCalendar(true);
+        await loadHome(true);
+        quickDialogSubmitting = false;
+        const overlay = document.querySelector(".phone-overlay-layer");
+        if (overlay) overlay.innerHTML = "";
+        render(renderCalendar());
+      } catch (error) {
+        quickDialogSubmitting = false;
+        actionEl.disabled = false;
+        actionEl.textContent = originalText;
+        toast(error.message);
+      }
       return;
     }
     if (action === "confirm-quick-milestone") {
+      if (quickDialogSubmitting) return;
       const title = String(document.querySelector("#journal-quick-input")?.value || "").trim();
       if (!title) return toast("里程碑不能为空");
-      await api.post("/api/milestones", { title, date: store.calendarSelectedDate });
-      await loadCalendar(true);
-      const overlay = document.querySelector(".phone-overlay-layer");
-      if (overlay) overlay.innerHTML = "";
-      render(renderCalendar());
+      quickDialogSubmitting = true;
+      actionEl.disabled = true;
+      const originalText = actionEl.textContent;
+      actionEl.textContent = "保存中";
+      try {
+        await api.post("/api/milestones", { title, date: store.calendarSelectedDate });
+        await loadCalendar(true);
+        quickDialogSubmitting = false;
+        const overlay = document.querySelector(".phone-overlay-layer");
+        if (overlay) overlay.innerHTML = "";
+        render(renderCalendar());
+      } catch (error) {
+        quickDialogSubmitting = false;
+        actionEl.disabled = false;
+        actionEl.textContent = originalText;
+        toast(error.message);
+      }
       return;
     }
     if (action === "confirm-conversation-rename") {
