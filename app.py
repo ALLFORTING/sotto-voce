@@ -1898,6 +1898,16 @@ def home():
         anniversaries = rows_to_dicts(
             conn.execute("SELECT * FROM anniversaries ORDER BY date").fetchall()
         )
+        today_todos = rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM todos
+                WHERE due_date = ? AND done = 0
+                ORDER BY id
+                """,
+                (china_now.date().isoformat(),),
+            ).fetchall()
+        )
         streak = checkin_streak(conn)
     days_together = None
     if settings.get("origin_date"):
@@ -1934,6 +1944,7 @@ def home():
             "last_conversation": latest,
             "upcoming_anniversaries": upcoming,
             "today_memory": today_memory,
+            "today_todos": today_todos,
             "memory_status": mcp_phase_status(),
             "streak": streak,
         }

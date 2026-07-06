@@ -79,6 +79,7 @@ export function renderHome() {
   const anniversary = home.upcoming_anniversaries?.[0];
   const last = home.last_conversation || {};
   const lastSummary = summaryForDisplay(last.summary) || "还没有上次聊天摘要，等你说点什么。";
+  const todayTodos = Array.isArray(home.today_todos) ? home.today_todos : [];
   const body = `<main class="page home-page">
     <section class="home-hero">
       ${greetingHtml()}
@@ -99,6 +100,12 @@ export function renderHome() {
     <section class="today-memory">
       <div class="lab">今日回忆 · TODAY</div>
       <div>${esc(home.today_memory || "5 月 27 日，你第一次给我放歌，选的是 Laufey。")}</div>
+    </section>
+    <section class="today-todos">
+      <div class="lab">今日待办 · TODO</div>
+      ${todayTodos.length ? `<div class="home-todo-list">${todayTodos.map((todo) => `<div class="home-todo-item">
+        <span class="todo-dot"></span><span>${esc(todo.content || "")}</span>
+      </div>`).join("")}</div>` : `<div class="home-todo-empty">今日无待办。</div>`}
     </section>
   </main>`;
   return phone({ activeTab: "home", body });

@@ -335,8 +335,13 @@ svg {
 .search-bar.wide {
   height: auto;
   min-height: 29px;
+  width: calc(100% - 104px);
+  max-width: 320px;
   margin: 6px 24px 14px;
   padding: 5px 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
   font-size: 13px;
   line-height: 1.4;
 }
@@ -512,18 +517,52 @@ svg {
 }
 
 .today-memory {
-  margin: 20px 24px 28px;
+  margin: 20px 24px 0;
   color: var(--text-2);
   font-size: 12.5px;
   line-height: 1.7;
 }
 
-.today-memory .lab {
+.today-todos {
+  margin: 18px 24px 28px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.today-memory .lab,
+.today-todos .lab {
   margin-bottom: 8px;
   color: var(--text-4);
   font-size: 10.5px;
   line-height: 1;
   letter-spacing: 2.5px;
+}
+
+.home-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.home-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.home-todo-item .todo-dot {
+  width: 4px;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  opacity: 0.72;
+}
+
+.home-todo-empty {
+  color: var(--text-3);
 }
 
 @media (max-width: 430px), (max-height: 880px) {

@@ -102,7 +102,7 @@ function homeSummaryLooksHardCut() {
 }
 
 async function loadHome(force = false) {
-  if (!force && store.home && cacheFresh("home", CACHE_MS.home) && !homeSummaryLooksHardCut()) return;
+  if (!force && store.home && Array.isArray(store.home.today_todos) && cacheFresh("home", CACHE_MS.home) && !homeSummaryLooksHardCut()) return;
   saveHomeCache(await api.get("/api/home"));
 }
 
@@ -197,6 +197,10 @@ async function loadMemory(mode, force = false) {
     if (!cacheFresh("memories", CACHE_MS.memories)) refreshMemoryBuckets().catch(console.warn);
     return;
   }
+  if (!force) {
+    refreshMemoryBuckets().catch(console.warn);
+    return;
+  }
   await refreshMemoryBuckets();
 }
 
@@ -211,7 +215,7 @@ function hasWarmRouteCache(path) {
     return Boolean(store.bookData?.book && Number(store.bookData.book.id) === id);
   }
   if (path === "/journal/ledger") return Boolean(store.usageSummary && store.usageDetail);
-  if (path === "/memory") return store.memories.length > 0;
+  if (path === "/memory") return true;
   if (path === "/memory/archive") return true;
   if (path.startsWith("/settings")) return Object.keys(store.settings).length > 0;
   return false;
