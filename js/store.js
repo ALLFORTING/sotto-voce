@@ -1,4 +1,4 @@
-export const VERSION = "cheng-v136";
+export const VERSION = "cheng-v143";
 
 const readJson = (key, fallback) => {
   try {
@@ -42,6 +42,7 @@ export const store = {
   searchMedia: [],
   searchMonth: thisMonthChina(),
   searchMonthDays: [],
+  searchCalendarMonths: {},
   searchDateGroups: [],
   searchConversationTitle: "",
   calendarMonth: thisMonthChina(),

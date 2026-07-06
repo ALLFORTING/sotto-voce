@@ -59,8 +59,9 @@ let navigationId = 0;
 let longPressTimer = 0;
 let longPressStart = null;
 let suppressBookCardClick = false;
-let searchCalendarY0 = null;
 let jumpClearTimer = 0;
+const SEARCH_CALENDAR_START = "2026-01";
+const SEARCH_CALENDAR_MONTHS = 12;
 
 const CACHE_MS = {
   home: 5 * 60_000,
@@ -400,6 +401,7 @@ function resetSearchState() {
   store.searchGroups = [];
   store.searchDetail = [];
   store.searchMedia = [];
+  store.searchCalendarMonths = {};
   store.searchDateGroups = [];
   store.searchConversationTitle = "";
 }
@@ -417,6 +419,15 @@ function shiftMonth(month, delta) {
   const [year, index] = String(month).split("-").map(Number);
   const date = new Date(year || new Date().getFullYear(), (index || 1) - 1 + delta, 1);
   return monthKey(date);
+}
+
+function monthLabel(month) {
+  const [year, index] = String(month).split("-").map(Number);
+  return `${year}年${index}月`;
+}
+
+function searchTimelineMonths() {
+  return Array.from({ length: SEARCH_CALENDAR_MONTHS }, (_, index) => shiftMonth(SEARCH_CALENDAR_START, index));
 }
 
 function searchDateLabel(value) {
@@ -497,45 +508,36 @@ function groupedMediaRows(items) {
 }
 
 function searchCalendarHtml() {
-  const [year, month] = store.searchMonth.split("-").map(Number);
-  const first = new Date(year, month - 1, 1);
-  const total = new Date(year, month, 0).getDate();
-  const offset = (first.getDay() + 6) % 7;
-  const counts = new Map((store.searchMonthDays || []).map((item) => [item.date, item]));
-  const nowYear = new Date().getFullYear();
-  const years = [...new Set([year, ...Array.from({ length: 17 }, (_, index) => nowYear + 1 - index)])]
-    .sort((a, b) => b - a);
-  const months = Array.from({ length: 12 }, (_, index) => index + 1);
-  const cells = [];
-  for (let i = 0; i < offset; i++) cells.push(`<span class="day ghost"></span>`);
-  for (let day = 1; day <= total; day++) {
-    const key = `${store.searchMonth}-${String(day).padStart(2, "0")}`;
-    const hit = counts.get(key);
-    cells.push(`<button class="day ${hit ? "has" : ""}" data-search-day="${key}">
-      <span>${day}</span>${hit ? `<i>${hit.count}</i>` : ""}
-    </button>`);
-  }
-  return `<section class="search-calendar">
-    <div class="cal-head">
-      <button data-action="search-prev-month">${icon("back")}</button>
-      <div class="date-picker">
-        <label class="date-select">
-          <select data-search-year>
-            ${years.map((item) => `<option value="${item}" ${item === year ? "selected" : ""}>${item} 年</option>`).join("")}
-          </select>
-          <span>${year} 年</span>${icon("chevD")}
-        </label>
-        <label class="date-select month">
-          <select data-search-month>
-            ${months.map((item) => `<option value="${item}" ${item === month ? "selected" : ""}>${item} 月</option>`).join("")}
-          </select>
-          <strong>${month} 月</strong>${icon("chevD")}
-        </label>
-      </div>
-      <button data-action="search-next-month">${icon("forward")}</button>
-    </div>
-    <div class="week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
-    <div class="days">${cells.join("")}</div>
+  return searchTimelineCalendarHtml();
+}
+
+function searchTimelineCalendarHtml() {
+  const todayDate = new Date();
+  const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`;
+  const months = searchTimelineMonths();
+  const monthHtml = months.map((month) => {
+    const [year, index] = month.split("-").map(Number);
+    const first = new Date(year, index - 1, 1);
+    const total = new Date(year, index, 0).getDate();
+    const offset = first.getDay();
+    const counts = new Map((store.searchCalendarMonths?.[month] || []).map((item) => [item.date, item]));
+    const cells = [];
+    for (let i = 0; i < offset; i++) cells.push(`<span class="day ghost"></span>`);
+    for (let day = 1; day <= total; day++) {
+      const key = `${month}-${String(day).padStart(2, "0")}`;
+      const hit = counts.get(key);
+      cells.push(`<button class="day timeline-day ${hit ? "has" : ""} ${key === today ? "today" : ""}" data-search-day="${key}" aria-label="${key}">
+        <span>${day}</span>${hit ? `<i>${hit.count}</i>` : ""}
+      </button>`);
+    }
+    return `<section class="search-month-block" data-month="${month}">
+      <div class="search-month-title">${monthLabel(month)}</div>
+      <div class="days search-month-days">${cells.join("")}</div>
+    </section>`;
+  }).join("");
+  return `<section class="search-calendar continuous">
+    <div class="week search-week-sticky"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+    <div class="search-calendar-list">${monthHtml}</div>
   </section>`;
 }
 
@@ -555,7 +557,7 @@ function renderSearchPage() {
   } else if (store.searchMode === "image" || store.searchMode === "file") {
     rows = store.searchMedia.length ? groupedMediaRows(store.searchMedia) : `<div class="loading-text">还没有找到${store.searchMode === "image" ? "图片" : "文件"}。</div>`;
   } else if (store.searchMode === "date") {
-    rows = searchCalendarHtml();
+    rows = searchTimelineCalendarHtml();
   } else {
     rows = `<div class="loading-text">输入关键词后回车搜索，或选择文件、图片、日期。</div>`;
   }
@@ -571,6 +573,22 @@ function renderSearchPage() {
 async function loadSearchMonth(month = store.searchMonth) {
   store.searchMonth = month;
   store.searchMonthDays = await api.get(`/api/search?type=dates&month=${encodeURIComponent(month)}`);
+}
+
+async function loadSearchCalendarTimeline() {
+  const months = searchTimelineMonths();
+  store.searchMonth = months[0];
+  const current = { ...(store.searchCalendarMonths || {}) };
+  await Promise.all(months.map(async (month) => {
+    if (current[month]) return;
+    try {
+      current[month] = await api.get(`/api/search?type=dates&month=${encodeURIComponent(month)}`);
+    } catch (error) {
+      current[month] = [];
+      console.warn(error);
+    }
+  }));
+  store.searchCalendarMonths = current;
 }
 
 function schedulePendingMessageJump(attempt = 0) {
@@ -1170,12 +1188,7 @@ document.addEventListener("click", async (event) => {
     }
     if (action === "search-date-mode") {
       store.searchMode = "date";
-      await loadSearchMonth(monthKey());
-      return render(renderSearchPage());
-    }
-    if (action === "search-prev-month" || action === "search-next-month") {
-      const delta = action === "search-next-month" ? 1 : -1;
-      await loadSearchMonth(shiftMonth(store.searchMonth, delta));
+      await loadSearchCalendarTimeline();
       return render(renderSearchPage());
     }
     if (action === "refresh-models") {
@@ -1608,13 +1621,6 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", async (event) => {
   try {
-    if (event.target.matches("[data-search-year], [data-search-month]")) {
-      const [currentYear, currentMonth] = store.searchMonth.split("-").map(Number);
-      const year = event.target.matches("[data-search-year]") ? Number(event.target.value) : currentYear;
-      const month = event.target.matches("[data-search-month]") ? Number(event.target.value) : currentMonth;
-      await loadSearchMonth(`${year}-${String(month).padStart(2, "0")}`);
-      return render(renderSearchPage());
-    }
     if (event.target.matches("[data-upload-file]") && event.target.files[0]) {
       const uploaded = await api.upload(event.target.files[0]);
       store.pendingAttachments.push(uploaded);
@@ -1815,8 +1821,6 @@ document.addEventListener("touchmove", (event) => {
 }, { passive: false });
 
 document.addEventListener("touchstart", (event) => {
-  const calendar = event.target.closest(".search-calendar");
-  if (calendar) searchCalendarY0 = event.changedTouches[0].screenY;
   const bar = event.target.closest(".pbar-touch");
   if (!bar) return;
   store._dragging = true;
@@ -1830,15 +1834,6 @@ document.addEventListener("touchmove", (event) => {
 }, { passive: true });
 
 document.addEventListener("touchend", async (event) => {
-  if (searchCalendarY0 !== null) {
-    const dy = event.changedTouches[0].screenY - searchCalendarY0;
-    searchCalendarY0 = null;
-    if (route() === "/chat/search" && store.searchMode === "date" && Math.abs(dy) > 60) {
-      await loadSearchMonth(shiftMonth(store.searchMonth, dy < 0 ? 1 : -1));
-      render(renderSearchPage());
-      return;
-    }
-  }
   if (!store._dragging) return;
   store._dragging = false;
   const book = store.bookData?.book;
