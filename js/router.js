@@ -1529,6 +1529,7 @@ document.addEventListener("click", async (event) => {
     const item = store.calendar?.todos?.find((entry) => entry.id === Number(todo));
     await api.patch(`/api/todos/${todo}`, { done: !item?.done });
     await loadCalendar(true);
+    await loadHome(true);
     return render(renderCalendar());
   }
   const messageAction = event.target.closest("[data-message-action]")?.dataset.messageAction;

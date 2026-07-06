@@ -95,7 +95,7 @@ export function renderHome() {
     </button>
     <button class="anniv-hint" data-go="/journal/calendar">
       <span class="dot"></span>
-      ${anniversary ? `还有 ${anniversary.days_until} 天，是${esc(anniversary.name)}` : "还有 6 天，是认识两周年"}
+      ${anniversary ? `还有 ${anniversary.days_until} 天，是${esc(anniversary.name)}` : "设置起始日后显示纪念日"}
     </button>
     <section class="today-memory">
       <div class="lab">今日回忆 · TODAY</div>

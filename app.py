@@ -1896,9 +1896,6 @@ def home():
             ORDER BY updated_at DESC LIMIT 1
             """,
         )
-        anniversaries = rows_to_dicts(
-            conn.execute("SELECT * FROM anniversaries ORDER BY date").fetchall()
-        )
         today_todos = rows_to_dicts(
             conn.execute(
                 """
@@ -1910,24 +1907,38 @@ def home():
             ).fetchall()
         )
         streak = checkin_streak(conn)
+    origin = None
     days_together = None
     if settings.get("origin_date"):
         try:
+            origin = date.fromisoformat(settings["origin_date"])
             days_together = (
-                china_now.date() - date.fromisoformat(settings["origin_date"])
+                china_now.date() - origin
             ).days
         except ValueError:
+            origin = None
             days_together = None
     upcoming = []
     today = china_now.date()
-    for item in anniversaries:
-        source = date.fromisoformat(item["date"])
-        candidate = source.replace(year=today.year)
+    if origin:
+        years = max(1, today.year - origin.year)
+        try:
+            candidate = origin.replace(year=origin.year + years)
+        except ValueError:
+            candidate = origin.replace(year=origin.year + years, day=28)
         if candidate < today:
-            candidate = candidate.replace(year=today.year + 1)
+            years += 1
+            try:
+                candidate = origin.replace(year=origin.year + years)
+            except ValueError:
+                candidate = origin.replace(year=origin.year + years, day=28)
         days = (candidate - today).days
-        if days <= 30:
-            upcoming.append({**item, "days_until": days})
+        upcoming.append({
+            "id": "origin_date",
+            "name": f"认识{years}周年",
+            "date": candidate.isoformat(),
+            "days_until": days,
+        })
     today_memory = None
     if latest:
         try:
