@@ -35,6 +35,20 @@ function messageBubbleHtml({ role, text, message, tail = true, read = false, att
   </div>`;
 }
 
+function inlineMessageEditHtml(message) {
+  const value = store.editingMessageDraft ?? message.content ?? "";
+  return `<div class="msg-bubble tail inline-edit-bubble">
+    <div class="inline-message-edit">
+      <textarea data-inline-edit="${message.id}" rows="1">${esc(value)}</textarea>
+      ${attachmentsHtml(message)}
+      <div class="actions">
+        <button type="button" class="cancel" data-action="cancel-inline-edit" data-message-id="${message.id}">取消</button>
+        <button type="button" class="send-edit" data-action="send-inline-edit" data-message-id="${message.id}">发送</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function aiBubblesHtml(message) {
   const parts = aiBubbleTexts(message.content);
   return parts.map((part, index) => messageBubbleHtml({
@@ -213,14 +227,19 @@ export function messageHtml(message, index, messages) {
   const messageId = message.id ? ` data-message-id="${message.id}"` : "";
   const messageIndex = ` data-message-index="${index}"`;
   const read = role === "user" && hasAiReplyAfter(index, messages);
-  const content = role === "ai" ? aiBubblesHtml(message) : messageBubbleHtml({
-    role,
-    text: message.content || "",
-    message,
-    tail: true,
-    read,
-    attachments: attachmentsHtml(message)
-  });
+  const editing = role === "user" && message.id && Number(store.editingMessageId) === Number(message.id);
+  const content = role === "ai"
+    ? aiBubblesHtml(message)
+    : editing
+      ? inlineMessageEditHtml(message)
+      : messageBubbleHtml({
+        role,
+        text: message.content || "",
+        message,
+        tail: true,
+        read,
+        attachments: attachmentsHtml(message)
+      });
   return `${dateDivider}
     <article class="msg-row ${role} ${message.streaming ? "streaming" : ""} ${message.starred ? "starred" : ""}" data-role="${message.role}"${messageId}${streamKey}${messageIndex}>
       ${role === "ai" ? thoughtHtml(message) : ""}

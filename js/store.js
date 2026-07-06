@@ -81,6 +81,7 @@ export const store = {
   longPress: null,
   archiveOpen: null,
   editingMessageId: null,
+  editingMessageDraft: "",
   expandedPresetId: null,
   expandedMcpId: null,
   addingPreset: false,
@@ -131,6 +132,8 @@ export function clearToken() {
 
 export function rememberConversation(id) {
   store.conversationId = id ? Number(id) : null;
+  store.editingMessageId = null;
+  store.editingMessageDraft = "";
   if (store.conversationId) localStorage.setItem("cheng_conversation_id", String(store.conversationId));
   else localStorage.removeItem("cheng_conversation_id");
 }

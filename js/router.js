@@ -118,6 +118,8 @@ async function loadConversations(force = false) {
 async function loadMessages(force = false) {
   if (!store.conversationId) {
     store.messages = [];
+    store.editingMessageId = null;
+    store.editingMessageDraft = "";
     return;
   }
   if (!force && store.messageCache[store.conversationId] && Date.now() - (store.cacheAt.messages[store.conversationId] || 0) < CACHE_MS.messages) {
@@ -302,6 +304,8 @@ async function createConversation() {
   rememberConversation(item.id);
   store.conversations.unshift(item);
   store.messages = [];
+  store.editingMessageId = null;
+  store.editingMessageDraft = "";
   cacheMessages(item.id, []);
   return item;
 }
@@ -1044,6 +1048,28 @@ document.addEventListener("click", async (event) => {
       if (overlay) overlay.innerHTML = "";
       return;
     }
+    if (action === "cancel-inline-edit") {
+      store.editingMessageId = null;
+      store.editingMessageDraft = "";
+      return render(renderChat());
+    }
+    if (action === "send-inline-edit") {
+      const messageId = Number(actionEl.dataset.messageId || 0);
+      const target = store.messages.find((item) => Number(item.id) === messageId);
+      const input = document.querySelector(`[data-inline-edit="${messageId}"]`);
+      const content = String(input?.value || "").trim();
+      if (!target) return;
+      if (!content) return toast("消息不能为空");
+      const index = store.messages.indexOf(target);
+      target.content = content;
+      store.messages = store.messages.slice(0, index + 1);
+      store.editingMessageId = null;
+      store.editingMessageDraft = "";
+      cacheMessages(store.conversationId, store.messages);
+      render(renderChat());
+      await sendMessage(content, [], { editMessageId: target.id, index: index + 1 });
+      return;
+    }
     if (action === "close-dialog") {
       const overlay = document.querySelector(".phone-overlay-layer");
       if (overlay) overlay.innerHTML = store.drawerOpen ? renderDrawer() : "";
@@ -1510,6 +1536,11 @@ document.addEventListener("input", (event) => {
     const send = document.querySelector(".send");
     if (send) send.disabled = !store.chatDraft.trim() && !store.pendingAttachments.length;
   }
+  if (event.target.matches("[data-inline-edit]")) {
+    store.editingMessageDraft = event.target.value;
+    event.target.style.height = "auto";
+    event.target.style.height = `${Math.min(160, event.target.scrollHeight)}px`;
+  }
   if (event.target.matches("#memory-search")) {
     store.memoryQuery = event.target.value;
     render(renderMemory(route() === "/memory/archive" ? "archive" : "bucket"));
@@ -1650,17 +1681,21 @@ async function handleMessageAction(action) {
     return dismissLongPress();
   }
   if (action === "edit") {
-    const content = prompt("编辑消息", target.content);
-    if (content?.trim()) {
-      const index = store.messages.indexOf(target);
-      target.content = content.trim();
-      store.messages = store.messages.slice(0, index + 1);
-      cacheMessages(store.conversationId, store.messages);
-      store.longPress = null;
-      render(renderChat());
-      await sendMessage(content.trim(), [], { editMessageId: target.id, index: index + 1 });
-      return;
-    }
+    store.editingMessageId = target.id;
+    store.editingMessageDraft = target.content || "";
+    store.longPress = null;
+    dismissLongPress();
+    render(renderChat());
+    requestAnimationFrame(() => {
+      const input = document.querySelector(`[data-inline-edit="${target.id}"]`);
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+        input.style.height = "auto";
+        input.style.height = `${Math.min(160, input.scrollHeight)}px`;
+      }
+    });
+    return;
   }
   if (action === "delete") {
     await api.delete(`/api/messages/${target.id}`);
