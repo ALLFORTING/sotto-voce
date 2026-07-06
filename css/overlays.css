@@ -287,6 +287,31 @@
   text-align: center;
 }
 
+.dialog-input {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.45;
+  letter-spacing: 0.2px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.dialog-input::placeholder {
+  color: var(--text-3);
+}
+
+.dialog-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-soft));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .dialog-actions {
   margin-top: 18px;
   display: flex;

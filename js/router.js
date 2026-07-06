@@ -814,6 +814,22 @@ function showConversationDeleteDialog(item) {
     </section>`);
 }
 
+function showJournalInputDialog(type) {
+  const todo = type === "todo";
+  const title = todo ? "新增待办" : "新增里程碑";
+  const placeholder = todo ? "写下今天要做的事…" : "写下这一刻的里程碑…";
+  const action = todo ? "confirm-quick-todo" : "confirm-quick-milestone";
+  showAppDialog(`<section class="app-dialog journal-input-dialog">
+      <div class="dialog-title">${title}</div>
+      <input class="dialog-input" id="journal-quick-input" placeholder="${placeholder}">
+      <div class="dialog-actions">
+        <button class="cancel" data-action="close-dialog">取消</button>
+        <button class="ok" data-action="${action}">保存</button>
+      </div>
+    </section>`);
+  requestAnimationFrame(() => document.querySelector("#journal-quick-input")?.focus());
+}
+
 document.addEventListener("pointerdown", (event) => {
   const message = event.target.closest(".msg-row[data-message-index]");
   const conversation = event.target.closest(".drawer-item");
@@ -1077,6 +1093,27 @@ document.addEventListener("click", async (event) => {
       clearLongPressActive();
       return;
     }
+    if (action === "confirm-quick-todo") {
+      const content = String(document.querySelector("#journal-quick-input")?.value || "").trim();
+      if (!content) return toast("待办不能为空");
+      await api.post("/api/todos", { content, due_date: store.calendarSelectedDate });
+      await loadCalendar(true);
+      await loadHome(true);
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      render(renderCalendar());
+      return;
+    }
+    if (action === "confirm-quick-milestone") {
+      const title = String(document.querySelector("#journal-quick-input")?.value || "").trim();
+      if (!title) return toast("里程碑不能为空");
+      await api.post("/api/milestones", { title, date: store.calendarSelectedDate });
+      await loadCalendar(true);
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      render(renderCalendar());
+      return;
+    }
     if (action === "confirm-conversation-rename") {
       const conversationId = Number(actionEl.dataset.conversationId || 0);
       const title = String(document.querySelector("#conversation-rename-input")?.value || "").trim();
@@ -1275,20 +1312,12 @@ document.addEventListener("click", async (event) => {
       return render(renderCalendar());
     }
     if (action === "quick-todo") {
-      const content = prompt("新增待办");
-      if (content?.trim()) {
-        await api.post("/api/todos", { content: content.trim(), due_date: store.calendarSelectedDate });
-        await loadCalendar(true);
-        render(renderCalendar());
-      }
+      showJournalInputDialog("todo");
+      return;
     }
     if (action === "quick-milestone") {
-      const title = prompt("新增里程碑");
-      if (title?.trim()) {
-        await api.post("/api/milestones", { title: title.trim(), date: store.calendarSelectedDate });
-        await loadCalendar(true);
-        render(renderCalendar());
-      }
+      showJournalInputDialog("milestone");
+      return;
     }
     if (action === "discuss-book") {
       const excerpt = (store.bookData?.paragraphs || []).map((item) => item.content).join("\n").slice(0, 180);
