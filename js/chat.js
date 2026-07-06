@@ -310,7 +310,11 @@ export function renderLongPressMenu() {
     ? below
     : Math.max(margin, rect.top - menuHeight - margin);
   const ai = store.longPress.role === "assistant";
+  const float = store.longPress.floatHtml && store.longPress.floatRect
+    ? `<div class="long-press-float msg-row ${esc(store.longPress.role || "")}" style="left:${store.longPress.floatRect.left}px;top:${store.longPress.floatRect.top}px;width:${store.longPress.floatRect.width}px">${store.longPress.floatHtml}</div>`
+    : "";
   return `<div class="overlay-scrim chat-only" data-action="close-overlay"></div>
+    ${float}
     <section class="long-press-menu" style="left:${left}px;top:${top}px">
       <button class="opt" data-message-action="copy"><span>复制</span>${icon("copy")}</button>
       <button class="opt" data-message-action="star"><span>${store.longPress.starred ? "取消星标" : "星标"}</span>${icon("star")}</button>

@@ -750,33 +750,33 @@ function dismissLongPress() {
   if (overlay) overlay.innerHTML = "";
 }
 
-function showConversationRenameDialog(item) {
+function showAppDialog(html) {
   const overlay = document.querySelector(".phone-overlay-layer");
   if (!overlay) return;
-  overlay.innerHTML = `<div class="overlay-scrim" data-action="close-dialog"></div>
-    <section class="app-dialog rename-dialog">
+  overlay.innerHTML = `${store.drawerOpen ? renderDrawer() : ""}<div class="overlay-scrim app-dialog-scrim" data-action="close-dialog"></div>${html}`;
+}
+
+function showConversationRenameDialog(item) {
+  showAppDialog(`<section class="app-dialog rename-dialog">
       <div class="dialog-title">重命名会话</div>
-      <input id="conversation-rename-input" value="${esc(item.title || "")}" placeholder="会话名称">
+      <input id="conversation-rename-input" value="${esc(item.title || "")}" placeholder="会话标题">
       <div class="dialog-actions">
         <button class="cancel" data-action="close-dialog">取消</button>
         <button class="ok" data-action="confirm-conversation-rename" data-conversation-id="${item.id}">保存</button>
       </div>
-    </section>`;
+    </section>`);
   requestAnimationFrame(() => document.querySelector("#conversation-rename-input")?.focus());
 }
 
 function showConversationDeleteDialog(item) {
-  const overlay = document.querySelector(".phone-overlay-layer");
-  if (!overlay) return;
-  overlay.innerHTML = `<div class="overlay-scrim" data-action="close-dialog"></div>
-    <section class="app-dialog">
+  showAppDialog(`<section class="app-dialog">
       <div class="dialog-title">删除这个会话？</div>
       <div class="dialog-text">删除后不会再显示在侧边栏。</div>
       <div class="dialog-actions">
         <button class="cancel" data-action="close-dialog">取消</button>
         <button class="ok danger" data-action="confirm-conversation-delete" data-conversation-id="${item.id}">删除</button>
       </div>
-    </section>`;
+    </section>`);
 }
 
 document.addEventListener("pointerdown", (event) => {
@@ -792,6 +792,8 @@ document.addEventListener("pointerdown", (event) => {
     if (message) {
       message.classList.add("long-press-active");
       const rect = message.getBoundingClientRect();
+      const bubble = event.target.closest(".msg-bubble") || message.querySelector(".msg-bubble");
+      const bubbleRect = bubble?.getBoundingClientRect() || rect;
       const layerRect = document.querySelector(".phone-overlay-layer")?.getBoundingClientRect() || { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
       const id = Number(message.dataset.messageId || 0);
       const index = Number(message.dataset.messageIndex ?? -1);
@@ -809,6 +811,13 @@ document.addEventListener("pointerdown", (event) => {
           width: rect.width,
           height: rect.height
         },
+        floatRect: {
+          left: bubbleRect.left - layerRect.left,
+          top: bubbleRect.top - layerRect.top,
+          width: bubbleRect.width,
+          height: bubbleRect.height
+        },
+        floatHtml: bubble?.outerHTML || "",
         viewport: { width: layerRect.width, height: layerRect.height }
       };
     }
@@ -897,6 +906,8 @@ document.addEventListener("click", async (event) => {
   if (store.longPress?.role === "book" && !event.target.closest(".long-press-menu") && !event.target.closest(".overlay-scrim")) {
     return dismissLongPress();
   }
+  const earlyConversationAction = event.target.closest("[data-conversation-action]")?.dataset.conversationAction;
+  if (earlyConversationAction) return handleConversationAction(earlyConversationAction);
   const jumpPi = event.target.closest("[data-jump-pi]");
   if (jumpPi) {
     const pi = Number(jumpPi.dataset.jumpPi);
@@ -980,11 +991,9 @@ document.addEventListener("click", async (event) => {
         overlay.innerHTML = `<div class="overlay-scrim" data-action="close-media-preview"></div>
           <section class="media-preview">
             <button class="close" data-action="close-media-preview">×</button>
-            <img src="${esc(actionEl.dataset.src || "")}" alt="${esc(actionEl.dataset.name || "图片")}">
-            <div class="bar">
-              <span>${esc(actionEl.dataset.name || "图片")}</span>
-              <button data-search-conversation="${esc(actionEl.dataset.searchConversation || "")}" data-search-message="${esc(actionEl.dataset.searchMessage || "")}">定位到聊天</button>
-            </div>
+            <button class="media-preview-image" data-search-conversation="${esc(actionEl.dataset.searchConversation || "")}" data-search-message="${esc(actionEl.dataset.searchMessage || "")}" aria-label="定位到聊天">
+              <img src="${esc(actionEl.dataset.src || "")}" alt="${esc(actionEl.dataset.name || "图片")}">
+            </button>
           </section>`;
       }
       return;
@@ -1017,11 +1026,16 @@ document.addEventListener("click", async (event) => {
       const conversationId = Number(actionEl.dataset.conversationId || 0);
       if (!conversationId) return;
       await api.delete(`/api/conversations/${conversationId}`);
-      if (store.conversationId === conversationId) rememberConversation(null);
+      const remaining = store.conversations.filter((entry) => entry.id !== conversationId);
+      saveConversationsCache(remaining);
+      delete store.messageCache[conversationId];
+      delete store.cacheAt.messages[conversationId];
+      if (store.conversationId === conversationId) rememberConversation(remaining[0]?.id || null);
       await loadConversations(true);
       await loadMessages(true);
       store.longPress = null;
       store.drawerOpen = true;
+      document.querySelector(".long-press-active")?.classList.remove("long-press-active");
       render(renderChat());
       toast("已删除");
       return;

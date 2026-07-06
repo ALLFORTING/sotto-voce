@@ -13,6 +13,11 @@
   background: var(--scrim-heavy);
 }
 
+.overlay-scrim.app-dialog-scrim {
+  z-index: 70;
+  background: var(--scrim-heavy);
+}
+
 .long-press-menu,
 .plus-menu {
   position: absolute;
@@ -25,6 +30,7 @@
 }
 
 .long-press-menu {
+  z-index: 80;
   min-width: 184px;
   padding: 2px 0;
 }
@@ -242,7 +248,7 @@
 
 .app-dialog {
   position: absolute;
-  z-index: 9;
+  z-index: 90;
   left: 32px;
   right: 32px;
   top: 50%;
