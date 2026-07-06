@@ -29,6 +29,7 @@ from llm import (
 )
 from mcp_client import (
     memory_archives,
+    memory_bucket_detail,
     memory_buckets,
     memory_emotion_trend,
     memory_today,
@@ -2062,6 +2063,15 @@ def memory(resource):
     except Exception as error:
         app.logger.exception("Memory endpoint failed")
         return jsonify({"error": str(error), "resource": resource}), 502
+
+
+@app.get("/api/memory/buckets/<path:bucket_id>")
+def memory_bucket(bucket_id):
+    try:
+        return jsonify(memory_bucket_detail(bucket_id))
+    except Exception as error:
+        app.logger.exception("Memory bucket detail failed")
+        return jsonify({"error": str(error), "bucket_id": bucket_id}), 502
 
 
 init_db()

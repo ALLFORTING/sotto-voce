@@ -94,6 +94,7 @@ export const store = {
   modelPicker: null,
   modelFilter: "",
   bucketEdit: null,
+  bucketDetailLoading: false,
   loading: false,
   error: ""
 };

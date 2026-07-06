@@ -161,6 +161,27 @@ async function refreshMemoryBuckets() {
   if (route() === "/memory") render(renderMemory("bucket"));
 }
 
+async function loadMemoryBucketDetail(bucketKeyValue) {
+  store.bucketDetailLoading = true;
+  render(renderMemory("bucket"));
+  try {
+    const detail = await api.get(`/api/memory/buckets/${encodeURIComponent(bucketKeyValue)}`);
+    const nextBucket = detail.bucket || {};
+    store.memories = (store.memories || []).map((item) => (
+      String(item.id || "") === String(nextBucket.id || bucketKeyValue)
+        || String(item.name || item.title || "") === String(bucketKeyValue)
+        ? { ...item, ...nextBucket }
+        : item
+    ));
+    saveMemoryCache(store.memories);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    store.bucketDetailLoading = false;
+    if (store.bucketEdit === bucketKeyValue && route() === "/memory") render(renderMemory("bucket"));
+  }
+}
+
 async function refreshMemoryArchives() {
   store.archiveLoading = true;
   if (route() === "/memory/archive") render(renderMemory("archive"));
@@ -983,6 +1004,7 @@ document.addEventListener("click", async (event) => {
       store.plusOpen = false;
       store.longPress = null;
       store.bucketEdit = null;
+      store.bucketDetailLoading = false;
       render(renderRoute(route()));
       scheduleReaderInit();
       return;
@@ -1439,7 +1461,8 @@ document.addEventListener("click", async (event) => {
   const bucket = event.target.closest("[data-bucket-edit]")?.dataset.bucketEdit;
   if (bucket) {
     store.bucketEdit = bucket;
-    return render(renderMemory("bucket"));
+    loadMemoryBucketDetail(bucket).catch(console.warn);
+    return;
   }
   const archive = event.target.closest("[data-archive-id]")?.dataset.archiveId;
   if (archive) {

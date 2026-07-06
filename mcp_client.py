@@ -21,6 +21,7 @@ _TODAY_MEMORY_CACHE = {"expires": 0, "value": None}
 _BUCKET_CACHE = {"expires": 0, "value": None}
 _BUCKET_CACHE_LOCK = threading.Lock()
 _BUCKET_CACHE_FILE = Path(__file__).resolve().parent / "data" / "memory_buckets_cache.json"
+_BUCKET_DETAIL_CACHE = {}
 _ARCHIVE_CACHE = {"expires": 0, "value": None}
 _TREND_CACHE = {"expires": 0, "value": None}
 _MEMORY_RESOURCE_CACHE_LOCK = threading.Lock()
@@ -382,6 +383,54 @@ def _bucket_json_records(raw):
     return records
 
 
+def _bucket_detail_from_raw(raw, bucket_id):
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    json_records = _bucket_json_records(text)
+    if bucket_id in json_records:
+        return dict(json_records[bucket_id])
+    if len(json_records) == 1:
+        return dict(next(iter(json_records.values())))
+
+    escaped = re.escape(str(bucket_id))
+    patterns = [
+        rf"\[bucket_id:{escaped}\][^\n]*\n(.*?)(?=\n---\n|\n\[bucket_id:|\Z)",
+        rf"bucket_id:{escaped}[^\n]*\n(.*?)(?=\n---\n|bucket_id:|\Z)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.S)
+        if match:
+            content = match.group(1).strip()
+            if content:
+                return {"content": content}
+    return {"content": text}
+
+
+def _merge_bucket_detail(bucket, detail, raw=None):
+    merged = dict(bucket or {})
+    if isinstance(detail, dict):
+        for key, value in detail.items():
+            if value not in (None, "", [], {}):
+                merged[key] = value
+    elif detail:
+        merged["content"] = str(detail)
+    if raw and "raw" not in merged:
+        merged["raw"] = str(raw)
+    facts = [
+        merged.get("summary"),
+        merged.get("content"),
+        merged.get("description"),
+        *(merged.get("core_facts") or [] if isinstance(merged.get("core_facts"), list) else []),
+        *(merged.get("highlights") or [] if isinstance(merged.get("highlights"), list) else []),
+    ]
+    if not any(str(item or "").strip() for item in facts):
+        raw_text = str(raw or "").strip()
+        if raw_text:
+            merged["content"] = raw_text
+    return merged
+
+
 def memory_buckets(force=False):
     now = time.monotonic()
     with _BUCKET_CACHE_LOCK:
@@ -424,6 +473,54 @@ def memory_buckets(force=False):
             temporary.replace(_BUCKET_CACHE_FILE)
         except OSError:
             LOGGER.warning("Unable to write shared bucket cache", exc_info=True)
+    return result
+
+
+def memory_bucket_detail(bucket_id):
+    bucket_id = str(bucket_id or "").strip()
+    if not bucket_id:
+        raise MCPError("bucket_id is required.")
+    now = time.monotonic()
+    cached = _BUCKET_DETAIL_CACHE.get(bucket_id)
+    if cached and cached["expires"] > now:
+        return cached["value"]
+
+    buckets = memory_buckets().get("buckets", [])
+    bucket = next((item for item in buckets if str(item.get("id")) == bucket_id), None)
+    if not bucket:
+        bucket = {"id": bucket_id}
+    queries = [bucket_id]
+    name = str(bucket.get("name") or bucket.get("title") or "").strip()
+    if name and name not in queries:
+        queries.append(name)
+
+    raw_results = []
+    detail = {}
+    for query in queries:
+        try:
+            raw = call_tool(
+                "breath",
+                {
+                    "query": query,
+                    "mode": "summary",
+                    "max_results": 10,
+                    "include_dormant": True,
+                },
+            )
+        except Exception:
+            LOGGER.exception("Memory bucket detail lookup failed for %s", query)
+            continue
+        raw_results.append(str(raw))
+        detail = _bucket_detail_from_raw(raw, bucket_id)
+        if any(
+            str(detail.get(key) or "").strip()
+            for key in ("summary", "content", "description")
+        ) or detail.get("core_facts") or detail.get("highlights"):
+            break
+
+    merged = _merge_bucket_detail(bucket, detail, "\n\n---\n\n".join(raw_results))
+    result = {"bucket": merged, "raw": "\n\n---\n\n".join(raw_results)}
+    _BUCKET_DETAIL_CACHE[bucket_id] = {"expires": now + 300, "value": result}
     return result
 
 

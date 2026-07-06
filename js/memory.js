@@ -157,9 +157,12 @@ export function renderBucketEdit() {
     bucket.content,
     bucket.description,
     ...(Array.isArray(bucket.core_facts) ? bucket.core_facts : []),
-    ...(Array.isArray(bucket.highlights) ? bucket.highlights : [])
+    ...(Array.isArray(bucket.highlights) ? bucket.highlights : []),
+    bucket.raw && !bucket.summary && !bucket.content ? bucket.raw : ""
   ].filter(Boolean);
-  const content = facts.join("\n") || "这个桶暂时没有详细摘要；列表中的标题、标签、重要度和状态已按 OB 返回数据带入。";
+  const content = store.bucketDetailLoading
+    ? "正在从 Ombre Brain 读取这个记忆桶的详细内容…"
+    : facts.join("\n") || "没有从 Ombre Brain 读到这个桶的详细内容。";
   const importance = Math.max(0, Math.min(10, Number(bucket.importance ?? bucket.score ?? (Number(bucket.weight || 0) * 10) ?? 5) || 5));
   const percent = Math.round(importance * 10);
   const state = bucketState(bucket);
