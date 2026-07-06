@@ -559,7 +559,8 @@
 }
 
 .long-press-active.ai .msg-bubble,
-.long-press-float.ai .msg-bubble {
+.long-press-float.ai .msg-bubble,
+.long-press-float.assistant .msg-bubble {
   background: color-mix(in oklch, var(--bubble-ai) 72%, var(--accent) 28%);
   filter: brightness(1.18) saturate(1.12);
 }
@@ -575,7 +576,8 @@
 }
 
 .long-press-active.ai .msg-bubble::after,
-.long-press-float.ai .msg-bubble::after {
+.long-press-float.ai .msg-bubble::after,
+.long-press-float.assistant .msg-bubble::after {
   opacity: 0.34;
 }
 
@@ -635,13 +637,13 @@
 }
 
 .chat-filter-row {
-  padding: 10px 22px 8px 32px;
+  padding: 10px 22px 8px 22px;
   display: flex;
   gap: 8px;
 }
 
 .phone .chat-filter-row {
-  padding-left: 32px;
+  padding-left: 22px;
 }
 
 .chat-filter-row .chip {
