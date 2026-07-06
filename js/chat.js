@@ -163,21 +163,25 @@ function attachmentsHtml(message) {
   return `<div class="msg-attachments">${items}</div>`;
 }
 
+const chinaDateParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+
 function dateParts(value) {
-  if (typeof value === "string") {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) return {
-      year: Number(match[1]),
-      month: Number(match[2]),
-      day: Number(match[3])
-    };
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return { year, month, day };
   }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
+  const parts = Object.fromEntries(chinaDateParts.formatToParts(date).map((part) => [part.type, part.value]));
   return {
-    year: date.getFullYear(),
-    month: date.getMonth() + 1,
-    day: date.getDate()
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day)
   };
 }
 
