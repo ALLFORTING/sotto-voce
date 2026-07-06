@@ -502,6 +502,10 @@ function searchCalendarHtml() {
   const total = new Date(year, month, 0).getDate();
   const offset = (first.getDay() + 6) % 7;
   const counts = new Map((store.searchMonthDays || []).map((item) => [item.date, item]));
+  const nowYear = new Date().getFullYear();
+  const years = [...new Set([year, ...Array.from({ length: 17 }, (_, index) => nowYear + 1 - index)])]
+    .sort((a, b) => b - a);
+  const months = Array.from({ length: 12 }, (_, index) => index + 1);
   const cells = [];
   for (let i = 0; i < offset; i++) cells.push(`<span class="day ghost"></span>`);
   for (let day = 1; day <= total; day++) {
@@ -514,7 +518,20 @@ function searchCalendarHtml() {
   return `<section class="search-calendar">
     <div class="cal-head">
       <button data-action="search-prev-month">${icon("back")}</button>
-      <div><strong>${month}月</strong><span>${year}</span></div>
+      <div class="date-picker">
+        <label class="date-select">
+          <select data-search-year>
+            ${years.map((item) => `<option value="${item}" ${item === year ? "selected" : ""}>${item} 年</option>`).join("")}
+          </select>
+          <span>${year} 年</span>${icon("chevD")}
+        </label>
+        <label class="date-select month">
+          <select data-search-month>
+            ${months.map((item) => `<option value="${item}" ${item === month ? "selected" : ""}>${item} 月</option>`).join("")}
+          </select>
+          <strong>${month} 月</strong>${icon("chevD")}
+        </label>
+      </div>
       <button data-action="search-next-month">${icon("forward")}</button>
     </div>
     <div class="week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
@@ -1591,6 +1608,13 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", async (event) => {
   try {
+    if (event.target.matches("[data-search-year], [data-search-month]")) {
+      const [currentYear, currentMonth] = store.searchMonth.split("-").map(Number);
+      const year = event.target.matches("[data-search-year]") ? Number(event.target.value) : currentYear;
+      const month = event.target.matches("[data-search-month]") ? Number(event.target.value) : currentMonth;
+      await loadSearchMonth(`${year}-${String(month).padStart(2, "0")}`);
+      return render(renderSearchPage());
+    }
     if (event.target.matches("[data-upload-file]") && event.target.files[0]) {
       const uploaded = await api.upload(event.target.files[0]);
       store.pendingAttachments.push(uploaded);

@@ -836,35 +836,97 @@
 }
 
 .search-calendar {
-  padding: 14px 22px 24px;
+  margin: 6px 18px 22px;
+  padding: 18px 16px 20px;
+  border: 1px solid var(--border-soft);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 36%),
+    var(--bg-elev);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.06);
 }
 
 .search-calendar .cal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
 .search-calendar .cal-head button {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
   display: grid;
   place-items: center;
+  border-radius: 50%;
+  background: var(--bg-sunken);
   color: var(--text-2);
 }
 
-.search-calendar .cal-head strong {
-  color: var(--text);
-  font-size: 24px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
+.search-calendar .cal-head button svg {
+  width: 14px;
+  height: 14px;
 }
 
-.search-calendar .cal-head span {
-  margin-left: 8px;
+.search-calendar .date-picker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.search-calendar .date-select {
+  position: relative;
+  min-width: 92px;
+  height: 38px;
+  padding: 0 30px 0 13px;
+  border: 1px solid var(--border-soft);
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.search-calendar .date-select.month {
+  min-width: 82px;
+}
+
+.search-calendar .date-select select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.search-calendar .date-select strong {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.search-calendar .date-select span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.search-calendar .date-select svg {
+  position: absolute;
+  right: 11px;
+  width: 13px;
+  height: 13px;
   color: var(--text-3);
-  font-size: 12px;
+  pointer-events: none;
 }
 
 .search-calendar .week,
@@ -877,33 +939,47 @@
 .search-calendar .week {
   color: var(--text-3);
   font-size: 11px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  letter-spacing: 0.8px;
 }
 
 .search-calendar .day {
-  height: 44px;
+  height: 42px;
   display: grid;
   place-items: center;
   color: var(--text-2);
   font-size: 13px;
   position: relative;
+  border-radius: 16px;
+}
+
+.search-calendar .day:not(.ghost):active {
+  background: var(--bg-sunken);
 }
 
 .search-calendar .day.has span {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
   color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .search-calendar .day i {
   position: absolute;
-  bottom: 2px;
+  bottom: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bg);
   color: var(--text-3);
   font-size: 9px;
+  line-height: 14px;
   font-style: normal;
 }
 
