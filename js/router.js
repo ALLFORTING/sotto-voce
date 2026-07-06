@@ -742,10 +742,16 @@ function clearLongPress() {
   longPressStart = null;
 }
 
+function clearLongPressActive() {
+  document.querySelectorAll(".long-press-active, .long-press-source-hidden").forEach((el) => {
+    el.classList.remove("long-press-active", "long-press-source-hidden");
+  });
+}
+
 function dismissLongPress() {
   store.longPress = null;
   suppressBookCardClick = false;
-  document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+  clearLongPressActive();
   const overlay = document.querySelector(".phone-overlay-layer");
   if (overlay) overlay.innerHTML = "";
 }
@@ -820,6 +826,7 @@ document.addEventListener("pointerdown", (event) => {
         floatHtml: bubble?.outerHTML || "",
         viewport: { width: layerRect.width, height: layerRect.height }
       };
+      if (bubble) message.classList.add("long-press-source-hidden");
     }
     if (conversation) {
       store.longPress = { role: "conversation", conversationId: Number(conversation.dataset.conversation) };
@@ -962,7 +969,7 @@ document.addEventListener("click", async (event) => {
     if (action === "close-overlay") {
       if (store.longPress && store.drawerOpen) {
         store.longPress = null;
-        document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+        clearLongPressActive();
         const overlay = document.querySelector(".phone-overlay-layer");
         if (overlay) overlay.innerHTML = renderDrawer();
         return;
@@ -991,11 +998,19 @@ document.addEventListener("click", async (event) => {
         overlay.innerHTML = `<div class="overlay-scrim" data-action="close-media-preview"></div>
           <section class="media-preview">
             <button class="close" data-action="close-media-preview">×</button>
-            <button class="media-preview-image" data-search-conversation="${esc(actionEl.dataset.searchConversation || "")}" data-search-message="${esc(actionEl.dataset.searchMessage || "")}" aria-label="定位到聊天">
+            <button class="media-preview-image" data-action="jump-search-message" data-search-conversation="${esc(actionEl.dataset.searchConversation || "")}" data-search-message="${esc(actionEl.dataset.searchMessage || "")}" aria-label="定位到聊天">
               <img src="${esc(actionEl.dataset.src || "")}" alt="${esc(actionEl.dataset.name || "图片")}">
             </button>
           </section>`;
       }
+      return;
+    }
+    if (action === "jump-search-message") {
+      const conversationId = actionEl.dataset.searchConversation;
+      const messageId = actionEl.dataset.searchMessage;
+      const overlay = document.querySelector(".phone-overlay-layer");
+      if (overlay) overlay.innerHTML = "";
+      if (conversationId && messageId) return await scrollToMessage(conversationId, messageId);
       return;
     }
     if (action === "close-media-preview") {
@@ -1007,7 +1022,7 @@ document.addEventListener("click", async (event) => {
       const overlay = document.querySelector(".phone-overlay-layer");
       if (overlay) overlay.innerHTML = store.drawerOpen ? renderDrawer() : "";
       store.longPress = null;
-      document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+      clearLongPressActive();
       return;
     }
     if (action === "confirm-conversation-rename") {
@@ -1035,7 +1050,7 @@ document.addEventListener("click", async (event) => {
       await loadMessages(true);
       store.longPress = null;
       store.drawerOpen = true;
-      document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+      clearLongPressActive();
       render(renderChat());
       toast("已删除");
       return;
@@ -1646,13 +1661,13 @@ async function handleConversationAction(action) {
   if (action === "rename") {
     showConversationRenameDialog(item);
     store.longPress = null;
-    document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+    clearLongPressActive();
     return;
   }
   if (action === "delete") {
     showConversationDeleteDialog(item);
     store.longPress = null;
-    document.querySelector(".long-press-active")?.classList.remove("long-press-active");
+    clearLongPressActive();
     return;
   }
   store.longPress = null;

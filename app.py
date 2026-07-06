@@ -605,11 +605,18 @@ def update_conversation(conversation_id):
 @app.delete("/api/conversations/<int:conversation_id>")
 def delete_conversation(conversation_id):
     with connection() as conn:
+        if not row_or_none(
+            conn, "SELECT id FROM conversations WHERE id = ?", (conversation_id,)
+        ):
+            return not_found("Conversation")
+        conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+        conn.execute(
+            "UPDATE usage_logs SET conversation_id = NULL WHERE conversation_id = ?",
+            (conversation_id,),
+        )
         cursor = conn.execute(
             "DELETE FROM conversations WHERE id = ?", (conversation_id,)
         )
-        if cursor.rowcount == 0:
-            return not_found("Conversation")
     return jsonify({"deleted": True, "id": conversation_id})
 
 
