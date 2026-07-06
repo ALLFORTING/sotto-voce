@@ -394,6 +394,16 @@ def _bucket_detail_from_raw(raw, bucket_id):
         return dict(next(iter(json_records.values())))
 
     escaped = re.escape(str(bucket_id))
+    dream_match = re.search(
+        rf"(?:^|\n)\[{escaped}\][^\n]*\nID:\s*{escaped}\s*\n(.*?)(?=\n=== Dream Details ===|\Z)",
+        text,
+        re.S,
+    )
+    if dream_match:
+        content = dream_match.group(1).strip()
+        if content:
+            return {"content": content}
+
     patterns = [
         rf"\[bucket_id:{escaped}\][^\n]*\n(.*?)(?=\n---\n|\n\[bucket_id:|\Z)",
         rf"bucket_id:{escaped}[^\n]*\n(.*?)(?=\n---\n|bucket_id:|\Z)",
@@ -496,6 +506,22 @@ def memory_bucket_detail(bucket_id):
 
     raw_results = []
     detail = {}
+    try:
+        raw = call_tool("dream", {"detail_ids": bucket_id})
+        raw_results.append(str(raw))
+        detail = _bucket_detail_from_raw(raw, bucket_id)
+    except Exception:
+        LOGGER.exception("Memory bucket dream detail lookup failed for %s", bucket_id)
+
+    if any(
+        str(detail.get(key) or "").strip()
+        for key in ("summary", "content", "description")
+    ) or detail.get("core_facts") or detail.get("highlights"):
+        merged = _merge_bucket_detail(bucket, detail, "\n\n---\n\n".join(raw_results))
+        result = {"bucket": merged, "raw": "\n\n---\n\n".join(raw_results)}
+        _BUCKET_DETAIL_CACHE[bucket_id] = {"expires": now + 300, "value": result}
+        return result
+
     for query in queries:
         try:
             raw = call_tool(
