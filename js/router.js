@@ -58,6 +58,8 @@ const app = document.querySelector("#app");
 let navigationId = 0;
 let longPressTimer = 0;
 let longPressStart = null;
+let longPressCleanupTimer = 0;
+let longPressScrollTop = null;
 let suppressBookCardClick = false;
 let jumpClearTimer = 0;
 let quickDialogSubmitting = false;
@@ -814,18 +816,59 @@ function clearLongPress() {
   longPressStart = null;
 }
 
+function lockChatStreamForLongPress() {
+  const stream = document.querySelector("#chat-stream");
+  if (!stream || stream.classList.contains("long-press-locked")) return;
+  longPressScrollTop = stream.scrollTop;
+  stream.classList.add("long-press-locked");
+}
+
+function unlockChatStreamForLongPress() {
+  const stream = document.querySelector("#chat-stream");
+  if (!stream) {
+    longPressScrollTop = null;
+    return;
+  }
+  stream.classList.remove("long-press-locked");
+  if (longPressScrollTop !== null) stream.scrollTop = longPressScrollTop;
+  longPressScrollTop = null;
+}
+
 function clearLongPressActive() {
+  clearTimeout(longPressCleanupTimer);
+  longPressCleanupTimer = 0;
   document.querySelectorAll(".long-press-active, .long-press-source-hidden").forEach((el) => {
     el.classList.remove("long-press-active", "long-press-source-hidden");
   });
+  unlockChatStreamForLongPress();
 }
 
-function dismissLongPress() {
+function longPressOverlayNodes(overlay) {
+  return overlay ? Array.from(overlay.querySelectorAll(".long-press-scrim, .long-press-float, .long-press-menu")) : [];
+}
+
+function dismissLongPress(options = {}) {
+  const animate = options.animate !== false;
   store.longPress = null;
   suppressBookCardClick = false;
-  clearLongPressActive();
+  clearLongPress();
   const overlay = document.querySelector(".phone-overlay-layer");
-  if (overlay) overlay.innerHTML = "";
+  const nodes = longPressOverlayNodes(overlay);
+  if (!nodes.length) {
+    clearLongPressActive();
+    return;
+  }
+  if (!animate) {
+    nodes.forEach((node) => node.remove());
+    clearLongPressActive();
+    return;
+  }
+  nodes.forEach((node) => node.classList.add("long-press-exit"));
+  clearTimeout(longPressCleanupTimer);
+  longPressCleanupTimer = setTimeout(() => {
+    nodes.forEach((node) => node.remove());
+    clearLongPressActive();
+  }, 190);
 }
 
 function closeAppDialog() {
@@ -837,7 +880,7 @@ function closeAppDialog() {
 function removeLongPressMenuDom() {
   const overlay = document.querySelector(".phone-overlay-layer");
   if (!overlay) return;
-  overlay.querySelectorAll(".long-press-menu, .overlay-scrim:not(.app-dialog-scrim)").forEach((node) => node.remove());
+  overlay.querySelectorAll(".long-press-menu, .long-press-float, .long-press-scrim, .overlay-scrim:not(.app-dialog-scrim)").forEach((node) => node.remove());
 }
 
 function refreshDrawerDom() {
@@ -922,14 +965,16 @@ document.addEventListener("pointerdown", (event) => {
   longPressStart = { x: event.clientX, y: event.clientY };
   longPressTimer = setTimeout(() => {
     if (message) {
-      message.classList.add("long-press-active");
       const rect = message.getBoundingClientRect();
-      const bubble = event.target.closest(".msg-bubble") || message.querySelector(".msg-bubble");
-      const bubbleRect = bubble?.getBoundingClientRect() || rect;
       const layerRect = document.querySelector(".phone-overlay-layer")?.getBoundingClientRect() || { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
       const id = Number(message.dataset.messageId || 0);
       const index = Number(message.dataset.messageIndex ?? -1);
       const target = (id && store.messages.find((item) => item.id === id)) || store.messages[index];
+      const clone = message.cloneNode(true);
+      clone.classList.remove("long-press-active", "long-press-source-hidden", "jump-highlight");
+      clone.querySelectorAll(".long-press-active, .long-press-source-hidden, .jump-highlight").forEach((node) => {
+        node.classList.remove("long-press-active", "long-press-source-hidden", "jump-highlight");
+      });
       store.longPress = {
         id: target?.id || id || null,
         index,
@@ -944,15 +989,16 @@ document.addEventListener("pointerdown", (event) => {
           height: rect.height
         },
         floatRect: {
-          left: bubbleRect.left - layerRect.left,
-          top: bubbleRect.top - layerRect.top,
-          width: bubbleRect.width,
-          height: bubbleRect.height
+          left: rect.left - layerRect.left,
+          top: rect.top - layerRect.top,
+          width: rect.width,
+          height: rect.height
         },
-        floatHtml: bubble?.outerHTML || "",
+        floatHtml: clone.outerHTML,
         viewport: { width: layerRect.width, height: layerRect.height }
       };
-      if (bubble) message.classList.add("long-press-source-hidden");
+      lockChatStreamForLongPress();
+      message.classList.add("long-press-source-hidden");
     }
     if (conversation) {
       store.longPress = { role: "conversation", conversationId: Number(conversation.dataset.conversation) };
@@ -1005,6 +1051,15 @@ document.addEventListener("pointermove", (event) => {
 ["pointerup", "pointercancel"].forEach((eventName) => {
   document.addEventListener(eventName, clearLongPress);
 });
+
+function dismissMessageLongPressOnViewportChange() {
+  if (store.longPress?.role === "user" || store.longPress?.role === "assistant") {
+    dismissLongPress({ animate: false });
+  }
+}
+
+window.addEventListener("resize", dismissMessageLongPressOnViewportChange);
+window.visualViewport?.addEventListener("resize", dismissMessageLongPressOnViewportChange);
 
 document.addEventListener("scroll", updateAutoFollow, true);
 
@@ -1815,7 +1870,7 @@ document.addEventListener("contextmenu", (event) => {
 
 async function handleMessageAction(action) {
   const target = store.messages.find((item) => item.id === store.longPress?.id) || store.messages[store.longPress?.index];
-  if (!target) return;
+  if (!target) return dismissLongPress();
   if (action === "copy") {
     await navigator.clipboard.writeText(target.content || "");
     toast("已复制");
@@ -1858,12 +1913,12 @@ async function handleMessageAction(action) {
     const messageId = target.id;
     store.messages = store.messages.slice(0, index);
     cacheMessages(store.conversationId, store.messages);
-    store.longPress = null;
+    dismissLongPress({ animate: false });
     render(renderChat());
     await sendMessage("", [], { messageId, index });
     return;
   }
-  store.longPress = null;
+  dismissLongPress({ animate: false });
   render(renderChat());
 }
 

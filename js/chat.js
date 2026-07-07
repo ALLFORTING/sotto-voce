@@ -307,14 +307,14 @@ export function renderPlusMenu() {
 export function renderLongPressMenu() {
   if (!store.longPress) return "";
   if (store.longPress.role === "conversation") {
-    return `<div class="overlay-scrim" data-action="close-overlay"></div>
+    return `<div class="overlay-scrim long-press-scrim" data-action="close-overlay"></div>
       <section class="long-press-menu" style="left:28px;top:138px">
         <button class="opt" data-conversation-action="rename"><span>重命名</span>${icon("edit")}</button>
         <button class="opt danger" data-conversation-action="delete"><span>删除</span>${icon("trash")}</button>
       </section>`;
   }
   if (store.longPress.role === "book") {
-    return `<div class="overlay-scrim" data-action="close-overlay"></div>
+    return `<div class="overlay-scrim long-press-scrim" data-action="close-overlay"></div>
       <section class="long-press-menu" style="left:28px;top:138px">
         <button class="opt" data-book-action="rename"><span>重命名</span>${icon("edit")}</button>
         <button class="opt danger" data-book-action="delete"><span>删除</span>${icon("trash")}</button>
@@ -334,9 +334,9 @@ export function renderLongPressMenu() {
     : Math.max(margin, rect.top - menuHeight - margin);
   const ai = store.longPress.role === "assistant";
   const float = store.longPress.floatHtml && store.longPress.floatRect
-    ? `<div class="long-press-float msg-row ${esc(store.longPress.role || "")}" style="left:${store.longPress.floatRect.left}px;top:${store.longPress.floatRect.top}px;width:${store.longPress.floatRect.width}px">${store.longPress.floatHtml}</div>`
+    ? `<div class="long-press-float ${esc(store.longPress.role || "")}" style="left:${store.longPress.floatRect.left}px;top:${store.longPress.floatRect.top}px;width:${store.longPress.floatRect.width}px">${store.longPress.floatHtml}</div>`
     : "";
-  return `<div class="overlay-scrim chat-only" data-action="close-overlay"></div>
+  return `<div class="overlay-scrim chat-only long-press-scrim" data-action="close-overlay"></div>
     ${float}
     <section class="long-press-menu" style="left:${left}px;top:${top}px">
       <button class="opt" data-message-action="copy"><span>复制</span>${icon("copy")}</button>

@@ -90,6 +90,12 @@
   mask-image: linear-gradient(to bottom, transparent 0, rgb(0 0 0 / 0.12) calc(var(--safe-top) + 10px), rgb(0 0 0 / 0.72) calc(var(--safe-top) + 42px), #000 calc(var(--safe-top) + 74px), #000 100%);
 }
 
+.chat-stream.long-press-locked {
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
 .chat-empty {
   flex: 1;
   display: grid;
@@ -120,12 +126,7 @@
   user-select: none;
 }
 
-.msg-row.long-press-active {
-  position: relative;
-  z-index: 60;
-}
-
-.msg-row.long-press-source-hidden .msg-bubble {
+.msg-row.long-press-source-hidden {
   opacity: 0;
 }
 
@@ -569,67 +570,17 @@
   color: var(--bg);
 }
 
-.long-press-active .msg-bubble {
-  transform: scale(1.02);
-  filter: brightness(1.08) saturate(1.06);
-  box-shadow:
-    0 6px 24px rgba(0, 0, 0, 0.2),
-    0 0 0 2px var(--bg),
-    0 0 0 5px var(--accent-soft),
-    0 0 28px var(--accent-soft);
-}
-
-.long-press-active.ai .msg-bubble,
-.long-press-float.ai .msg-bubble,
-.long-press-float.assistant .msg-bubble {
-  background: color-mix(in oklch, var(--bubble-ai) 72%, var(--accent) 28%);
-  filter: brightness(1.18) saturate(1.12);
-}
-
-.long-press-active .msg-bubble::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--accent-soft);
-  opacity: 0.22;
-  pointer-events: none;
-}
-
-.long-press-active.ai .msg-bubble::after,
-.long-press-float.ai .msg-bubble::after,
-.long-press-float.assistant .msg-bubble::after {
-  opacity: 0.34;
-}
-
 .long-press-float {
   position: absolute;
   z-index: 70;
   max-width: none;
   pointer-events: none;
-  transform: scale(1.02);
-  transform-origin: center center;
+  animation: long-press-float-in 170ms ease-out both;
 }
 
-.long-press-float .msg-bubble {
+.long-press-float > .msg-row {
   width: 100%;
-  max-width: 100%;
-  filter: brightness(1.1) saturate(1.08);
-  box-shadow:
-    0 8px 28px rgba(0, 0, 0, 0.22),
-    0 0 0 2px var(--bg),
-    0 0 0 5px var(--accent-soft),
-    0 0 30px var(--accent-soft);
-}
-
-.long-press-float .msg-bubble::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--accent-soft);
-  opacity: 0.18;
-  pointer-events: none;
+  max-width: none;
 }
 
 .chat-search-form {

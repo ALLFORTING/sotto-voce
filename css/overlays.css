@@ -13,6 +13,32 @@
   background: var(--scrim-heavy);
 }
 
+.overlay-scrim.long-press-scrim {
+  inset: 0;
+  background: rgba(58, 53, 48, 0.22);
+  animation: long-press-scrim-in 180ms ease-out both;
+}
+
+.phone.dark .overlay-scrim.long-press-scrim,
+.phone.academy .overlay-scrim.long-press-scrim,
+.phone.gothic .overlay-scrim.long-press-scrim {
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.long-press-exit {
+  pointer-events: none;
+  animation: long-press-scrim-out 180ms ease-in both;
+}
+
+.overlay-scrim.long-press-scrim.long-press-exit {
+  animation: long-press-scrim-out 180ms ease-in both;
+}
+
+.long-press-float.long-press-exit,
+.long-press-menu.long-press-exit {
+  animation: long-press-float-out 180ms ease-in both;
+}
+
 .overlay-scrim.app-dialog-scrim {
   z-index: 70;
   background: var(--scrim-heavy);
@@ -498,5 +524,45 @@
 @keyframes sheet-in {
   from {
     transform: translateY(100%);
+  }
+}
+
+@keyframes long-press-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes long-press-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes long-press-float-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes long-press-float-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.985);
   }
 }
