@@ -36,34 +36,12 @@ export function renderSettings() {
       <div class="group-label">SYSTEM</div>
       <button class="settings-row" data-go="/settings/api"><span class="label">模型与接口</span><span class="val">${esc(activePreset?.name || "未配置")}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/mcp"><span class="label">MCP 服务</span><span class="val">${store.mcpServers.length} 个</span><span class="chev">${icon("chevR")}</span></button>
-      <button class="settings-row" data-go="/settings/terminal"><span class="label">终端</span><span class="val">VPS 命令行</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-action="show-export-confirm"><span class="label">导出数据</span><span class="val"></span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-go="/settings/prompt"><span class="label">Prompt 配置</span><span class="val">${store.settings.system_prompt || store.settings.profile ? "已自定义" : "未填写"}</span><span class="chev">${icon("chevR")}</span></button>
       <button class="settings-row" data-action="change-token"><span class="label">访问令牌</span><span class="val">重新输入</span><span class="chev">${icon("chevR")}</span></button>
     </section>
   </main>`;
   return phone({ activeTab: "set", body });
-}
-
-export function renderTerminal() {
-  const logs = store.terminalHistory || [];
-  const body = `<main class="page">
-    ${subpageTop("终端")}
-    <div class="terminal-scroll scroll">
-      ${logs.length ? logs.map((log) => `
-        <div class="term-entry ${log.returncode === 0 ? "" : "error"}">
-          <div class="term-cmd">$ ${esc(log.command)}</div>
-          ${log.stdout ? `<pre class="term-out">${esc(log.stdout)}</pre>` : ""}
-          ${log.stderr ? `<pre class="term-err">${esc(log.stderr)}</pre>` : ""}
-        </div>
-      `).reverse().join("") : '<div class="term-empty">还没有执行过命令</div>'}
-    </div>
-    <div class="term-input-wrap">
-      <input class="term-input" type="text" placeholder="输入命令..." id="term-cmd-input">
-      <button class="term-run" data-action="exec-command">运行</button>
-    </div>
-  </main>`;
-  return phone({ activeTab: "set", hideTab: true, body });
 }
 
 export function renderPrompt() {
@@ -90,8 +68,8 @@ function presetForm(preset = {}) {
   const key = id || "new";
   const visible = store.visiblePresetKeys[id || "new"];
   const format = preset.format || "anthropic";
-  const hasKey = Boolean(preset.api_key);
-  const showKeyInput = visible || !hasKey;
+  const hasKey = Boolean(preset.has_api_key || preset.api_key);
+  const keyPlaceholder = hasKey ? `已配置：${maskKey(preset.api_key || "")}；留空不修改` : "请输入 API key";
   const model = preset.model || "";
   const modelOptions = store.modelOptions[key] || [];
   const manualModel = store.modelManualModels[key] || !modelOptions.length;
@@ -108,7 +86,7 @@ function presetForm(preset = {}) {
   return `<form class="preset-form" data-preset-form data-id="${id}">
     <div class="field"><label class="lab">名称</label><input name="name" value="${esc(preset.name || "新预设")}" required></div>
     <div class="field"><label class="lab">ENDPOINT</label><input name="endpoint" value="${esc(preset.endpoint || "")}" required></div>
-    <div class="field"><label class="lab">API KEY</label><div class="inp pass">${showKeyInput ? `<input name="api_key" type="${visible ? "text" : "password"}" value="${esc(preset.api_key || "")}" required>` : `<input type="hidden" name="api_key" value="${esc(preset.api_key || "")}"><span class="pass-mask">${esc(maskKey(preset.api_key))}</span>`}<button class="eye" type="button" data-action="toggle-preset-key" data-key-id="${id || "new"}">${icon("eye")}</button></div></div>
+    <div class="field"><label class="lab">API KEY</label><div class="inp pass"><input name="api_key" type="${visible ? "text" : "password"}" value="" placeholder="${esc(keyPlaceholder)}" ${hasKey ? "" : "required"}><button class="eye" type="button" data-action="toggle-preset-key" data-key-id="${id || "new"}">${icon("eye")}</button></div></div>
     <div class="field"><label class="lab">模型</label>${modelField}<div class="model-tools"><button type="button" data-action="refresh-models" data-key-id="${key}">${store.modelLoading === key ? "刷新中…" : "刷新模型列表"}</button>${modelOptions.length ? `<button type="button" data-action="toggle-model-manual" data-key-id="${key}">${manualModel ? "使用下拉" : "手动输入"}</button>` : ""}</div>${modelError}</div>
     <div class="field"><label class="lab">输入价格</label><div class="unit-input"><input name="input_price" type="number" step="0.0001" min="0" value="${Number(preset.input_price || 0)}"><span class="unit">$/MTok</span></div></div>
     <div class="field"><label class="lab">输出价格</label><div class="unit-input"><input name="output_price" type="number" step="0.0001" min="0" value="${Number(preset.output_price || 0)}"><span class="unit">$/MTok</span></div></div>

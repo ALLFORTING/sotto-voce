@@ -20,6 +20,8 @@ def connection():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
@@ -248,6 +250,19 @@ def parse_attachments(value):
     if value is None:
         return None
     if isinstance(value, str):
-        json.loads(value)
-        return value
-    return json.dumps(value, ensure_ascii=False)
+        items = json.loads(value)
+    else:
+        items = value
+    if isinstance(items, list):
+        cleaned = []
+        for item in items:
+            if isinstance(item, dict):
+                cleaned.append(
+                    {
+                        key: val
+                        for key, val in item.items()
+                        if key not in {"url", "signed_url", "exp", "sig"}
+                    }
+                )
+        return json.dumps(cleaned, ensure_ascii=False)
+    return json.dumps(items, ensure_ascii=False)

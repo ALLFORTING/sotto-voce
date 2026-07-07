@@ -150,13 +150,13 @@ function attachmentsHtml(message) {
   if (!attachments.length) return "";
   const items = attachments.map((item) => {
     const name = esc(item.name || "附件");
-    const path = esc(item.path || "");
-    if (item.type === "image" && item.path) {
-      return `<a class="msg-attachment image" href="${path}" target="_blank" rel="noopener">
-        <img src="${path}" alt="${name}" loading="lazy">
+    const src = esc(item.url || item.signed_url || item.path || "");
+    if (item.type === "image" && src) {
+      return `<a class="msg-attachment image" href="${src}" target="_blank" rel="noopener">
+        <img src="${src}" alt="${name}" loading="lazy" onerror="window.__refreshUploadSignatures?.(this)">
       </a>`;
     }
-    return `<a class="msg-attachment file" href="${path || "#"}" target="_blank" rel="noopener">
+    return `<a class="msg-attachment file" href="${src || "#"}" target="_blank" rel="noopener">
       ${icon("file")}<span>${name}</span>
     </a>`;
   }).join("");

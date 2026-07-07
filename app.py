@@ -1,9 +1,12 @@
 import json
 import hmac
 import logging
+import mimetypes
 import os
 import re
+import secrets
 import sqlite3
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -41,14 +44,39 @@ from mcp_client import (
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = (BASE_DIR.parent / "frontend" / "uploads").resolve()
 BOOK_DIR = BASE_DIR / "data" / "books"
+DATA_DIR = BASE_DIR / "data"
+UPLOAD_SIGNING_SECRET_FILE = DATA_DIR / "upload_signing_secret"
+UPLOAD_URL_TTL_SECONDS = 7 * 24 * 60 * 60
 MONTH_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 BOOK_CHAPTER_PATTERN = re.compile(
     r"(?im)^(第[0-9一二三四五六七八九十百千万零〇两]+[章节回卷部篇].*|Chapter\s+\d+.*)$"
 )
 
 app = Flask(__name__)
-CORS(app)
+cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("CHENG_CORS_ORIGINS", "https://allfortingting.xyz").split(",")
+    if origin.strip() and origin.strip() != "*"
+]
+CORS(app, origins=cors_origins)
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
+
+
+def load_upload_signing_secret():
+    secret = os.environ.get("UPLOAD_SIGNING_SECRET")
+    if secret:
+        return secret.encode("utf-8")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if UPLOAD_SIGNING_SECRET_FILE.exists():
+        return UPLOAD_SIGNING_SECRET_FILE.read_text(encoding="utf-8").strip().encode("utf-8")
+    secret = secrets.token_urlsafe(48)
+    UPLOAD_SIGNING_SECRET_FILE.write_text(secret, encoding="utf-8")
+    return secret.encode("utf-8")
+
+
+UPLOAD_SIGNING_SECRET = load_upload_signing_secret()
+SUMMARY_JOBS = set()
+SUMMARY_LOCK = threading.Lock()
 
 
 @app.before_request
@@ -87,6 +115,81 @@ def bad_request(message):
     return jsonify({"error": message}), 400
 
 
+def upload_signature(filename, expires_at):
+    payload_value = f"{filename}\n{int(expires_at)}".encode("utf-8")
+    return hmac.new(UPLOAD_SIGNING_SECRET, payload_value, "sha256").hexdigest()
+
+
+def signed_upload_url(path, ttl=UPLOAD_URL_TTL_SECONDS):
+    raw_path = str(path or "")
+    prefix = "/uploads/"
+    if not raw_path.startswith(prefix):
+        return raw_path
+    filename = raw_path[len(prefix):].replace("\\", "/")
+    expires_at = int(datetime.now(CHINA_TZ).timestamp()) + int(ttl)
+    signature = upload_signature(filename, expires_at)
+    return f"{prefix}{filename}?exp={expires_at}&sig={signature}"
+
+
+def valid_upload_signature(filename):
+    try:
+        expires_at = int(request.args.get("exp") or 0)
+    except (TypeError, ValueError):
+        return False
+    if expires_at < int(datetime.now(CHINA_TZ).timestamp()):
+        return False
+    supplied = str(request.args.get("sig") or "")
+    expected = upload_signature(filename.replace("\\", "/"), expires_at)
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
+def upload_bearer_authorized():
+    expected = os.environ.get("CHENG_API_TOKEN", "")
+    authorization = request.headers.get("Authorization", "")
+    supplied = (
+        authorization[7:].strip()
+        if authorization.lower().startswith("bearer ")
+        else ""
+    )
+    return bool(expected and supplied and hmac.compare_digest(supplied, expected))
+
+
+def sign_attachment_item(item):
+    if not isinstance(item, dict):
+        return item
+    signed = dict(item)
+    path = signed.get("path")
+    if path and str(path).startswith("/uploads/"):
+        signed["url"] = signed_upload_url(path)
+    return signed
+
+
+def sign_attachments(items):
+    if not isinstance(items, list):
+        return items
+    return [sign_attachment_item(item) for item in items]
+
+
+def mask_api_key(value):
+    value = str(value or "")
+    if not value:
+        return ""
+    return f"••••{value[-4:]}"
+
+
+def looks_masked_api_key(value):
+    value = str(value or "").strip()
+    return value.startswith("•") or bool(re.fullmatch(r"[*•]+.{0,8}", value))
+
+
+def mask_preset(row):
+    item = dict(row)
+    key = item.get("api_key") or ""
+    item["has_api_key"] = bool(key)
+    item["api_key"] = mask_api_key(key) if key else ""
+    return item
+
+
 def row_or_none(conn, query, values=()):
     row = conn.execute(query, values).fetchone()
     return dict(row) if row else None
@@ -109,6 +212,26 @@ def normalize_month(value):
         raise ValueError("month must use YYYY-MM.")
     parse_iso_day(f"{month}-01", "month")
     return month
+
+
+def queue_home_summary(conversation_id):
+    if not conversation_id:
+        return
+    with SUMMARY_LOCK:
+        if conversation_id in SUMMARY_JOBS:
+            return
+        SUMMARY_JOBS.add(conversation_id)
+
+    def worker():
+        try:
+            generate_home_summary(conversation_id)
+        except Exception:
+            app.logger.exception("Background conversation summary generation failed")
+        finally:
+            with SUMMARY_LOCK:
+                SUMMARY_JOBS.discard(conversation_id)
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def month_range(month):
@@ -224,7 +347,7 @@ def attachment_items(raw):
         attachments = json.loads(raw) if isinstance(raw, str) else raw
     except (TypeError, ValueError):
         return []
-    return attachments if isinstance(attachments, list) else []
+    return sign_attachments(attachments) if isinstance(attachments, list) else []
 
 
 def filter_attachments(raw, kind):
@@ -639,7 +762,7 @@ def list_messages(conversation_id):
     messages = rows_to_dicts(rows)
     for message in messages:
         if message["attachments"]:
-            message["attachments"] = json.loads(message["attachments"])
+            message["attachments"] = attachment_items(message["attachments"])
     return jsonify(messages)
 
 
@@ -669,7 +792,7 @@ def update_message(message_id):
             return not_found("Message")
         result = row_or_none(conn, "SELECT * FROM messages WHERE id = ?", (message_id,))
     if result["attachments"]:
-        result["attachments"] = json.loads(result["attachments"])
+        result["attachments"] = attachment_items(result["attachments"])
     return jsonify(result)
 
 
@@ -892,7 +1015,9 @@ def normalize_model_rows(data):
 
 @app.get("/api/presets")
 def list_presets():
-    return list_resource("api_presets")
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM api_presets ORDER BY id DESC").fetchall()
+    return jsonify([mask_preset(row) for row in rows])
 
 
 @app.post("/api/models/list")
@@ -955,7 +1080,7 @@ def create_preset():
             (
                 data["name"].strip(),
                 data["endpoint"].rstrip("/"),
-                data["api_key"],
+                str(data["api_key"]).strip(),
                 data["model"].strip(),
                 api_format,
                 active,
@@ -966,7 +1091,7 @@ def create_preset():
         result = row_or_none(
             conn, "SELECT * FROM api_presets WHERE id = ?", (cursor.lastrowid,)
         )
-    return jsonify(result), 201
+    return jsonify(mask_preset(result)), 201
 
 
 @app.patch("/api/presets/<int:resource_id>")
@@ -989,6 +1114,12 @@ def update_preset(resource_id):
         return bad_request("format must be anthropic or openai.")
     if "endpoint" in updates:
         updates["endpoint"] = str(updates["endpoint"]).rstrip("/")
+    if "api_key" in updates:
+        api_key = str(updates.get("api_key") or "").strip()
+        if not api_key or looks_masked_api_key(api_key):
+            updates.pop("api_key", None)
+        else:
+            updates["api_key"] = api_key
     for key in ("name", "model"):
         if key in updates:
             updates[key] = str(updates[key]).strip()
@@ -1005,6 +1136,13 @@ def update_preset(resource_id):
     with connection() as conn:
         if updates.get("active"):
             conn.execute("UPDATE api_presets SET active = 0")
+        if not updates:
+            result = row_or_none(
+                conn, "SELECT * FROM api_presets WHERE id = ?", (resource_id,)
+            )
+            if not result:
+                return not_found("Preset")
+            return jsonify(mask_preset(result))
         assignment = ", ".join(f"{key} = ?" for key in updates)
         cursor = conn.execute(
             f"UPDATE api_presets SET {assignment} WHERE id = ?",
@@ -1015,7 +1153,7 @@ def update_preset(resource_id):
         result = row_or_none(
             conn, "SELECT * FROM api_presets WHERE id = ?", (resource_id,)
         )
-    return jsonify(result)
+    return jsonify(mask_preset(result))
 
 
 @app.delete("/api/presets/<int:resource_id>")
@@ -1465,10 +1603,15 @@ def get_book_all(book_id):
 @app.post("/api/books/<int:book_id>/annotations")
 def create_annotation(book_id):
     data = payload()
-    paragraph_index = data.get("paragraph_index")
+    try:
+        paragraph_index = int(data.get("paragraph_index"))
+    except (TypeError, ValueError):
+        return bad_request("paragraph_index must be a non-negative integer.")
     content = str(data.get("content") or "").strip()
     role = data.get("role", "user")
-    if paragraph_index is None or not content:
+    if paragraph_index < 0:
+        return bad_request("paragraph_index must be a non-negative integer.")
+    if not content:
         return bad_request("paragraph_index and content are required.")
     if role not in ("user", "ai"):
         return bad_request("role must be 'user' or 'ai'.")
@@ -1575,7 +1718,10 @@ def list_annotations(book_id):
 @app.post("/api/books/<int:book_id>/progress")
 def update_book_progress(book_id):
     data = payload()
-    scroll_pct = float(data.get("scroll_pct", 0))
+    try:
+        scroll_pct = float(data.get("scroll_pct", 0))
+    except (TypeError, ValueError):
+        return bad_request("scroll_pct must be a number.")
     with connection() as conn:
         book = row_or_none(conn, "SELECT * FROM books WHERE id = ?", (book_id,))
         if not book:
@@ -1809,66 +1955,6 @@ def update_settings():
     return get_settings()
 
 
-@app.post("/api/terminal/exec")
-def terminal_exec():
-    data = payload()
-    command = str(data.get("command") or "").strip()
-    if not command:
-        return bad_request("command is required.")
-    import subprocess
-    import time
-
-    created_at = now_iso()
-    start = time.monotonic()
-    env = os.environ.copy()
-    env["GIT_CONFIG_COUNT"] = "1"
-    env["GIT_CONFIG_KEY_0"] = "safe.directory"
-    env["GIT_CONFIG_VALUE_0"] = "*"
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=env,
-        )
-        stdout = result.stdout
-        stderr = result.stderr
-        returncode = result.returncode
-    except subprocess.TimeoutExpired:
-        stdout = ""
-        stderr = "Command timed out after 30 seconds."
-        returncode = -1
-    duration_ms = int((time.monotonic() - start) * 1000)
-    with connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO terminal_logs(command, stdout, stderr, returncode, duration_ms, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (command, stdout, stderr, returncode, duration_ms, created_at),
-        )
-    return jsonify(
-        {
-            "command": command,
-            "stdout": stdout,
-            "stderr": stderr,
-            "returncode": returncode,
-            "duration_ms": duration_ms,
-        }
-    )
-
-
-@app.get("/api/terminal/history")
-def terminal_history():
-    with connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM terminal_logs ORDER BY id DESC LIMIT 50"
-        ).fetchall()
-    return jsonify([dict(row) for row in rows])
-
-
 @app.get("/api/home")
 def home():
     china_now = datetime.now(CHINA_TZ)
@@ -1891,7 +1977,11 @@ def home():
         latest = row_or_none(
             conn,
             """
-            SELECT c.id, c.title, c.updated_at, c.summary, c.summary_message_id
+            SELECT c.id, c.title, c.updated_at, c.summary, c.summary_message_id,
+                   (
+                     SELECT MAX(id) FROM messages
+                     WHERE conversation_id = c.id AND deleted = 0
+                   ) AS latest_message_id
             FROM conversations c
             ORDER BY updated_at DESC LIMIT 1
             """,
@@ -1940,11 +2030,11 @@ def home():
             "days_until": days,
         })
     today_memory = None
-    if latest:
-        try:
-            latest["summary"] = generate_home_summary(latest["id"])
-        except Exception:
-            app.logger.exception("Conversation summary generation failed")
+    if latest and latest.get("latest_message_id") and (
+        not latest.get("summary")
+        or latest.get("summary_message_id") != latest.get("latest_message_id")
+    ):
+        queue_home_summary(latest["id"])
     try:
         today_memory = memory_today()
     except Exception:
@@ -1971,23 +2061,60 @@ def upload():
     filename = secure_filename(file.filename or "")
     if not filename:
         return bad_request("A valid filename is required.")
+    suffix = Path(filename).suffix.lower()
+    mimetype = (file.mimetype or mimetypes.guess_type(filename)[0] or "").lower()
+    document_mimes = {
+        ".pdf": {"application/pdf"},
+        ".txt": {"text/plain"},
+        ".md": {"text/markdown", "text/plain"},
+        ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+        ".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    }
+    blocked_suffixes = {".html", ".htm", ".svg", ".js", ".mjs", ".php", ".exe", ".bat", ".cmd", ".sh"}
+    if suffix in blocked_suffixes:
+        return bad_request("This file type is not allowed.")
+    is_image = mimetype.startswith("image/") and suffix in {
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif"
+    }
+    is_document = suffix in document_mimes and (
+        mimetype in document_mimes[suffix] or not mimetype
+    )
+    if not is_image and not is_document:
+        return bad_request("Only images and common documents are allowed.")
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(CHINA_TZ).strftime("%Y%m%d%H%M%S%f")
     stored_name = f"{timestamp}-{filename}"
     file.save(UPLOAD_DIR / stored_name)
+    path = f"/uploads/{stored_name}"
     return jsonify(
         {
             "name": file.filename,
-            "path": f"/uploads/{stored_name}",
-            "type": "image" if (file.mimetype or "").startswith("image/") else "file",
-            "mime_type": file.mimetype,
+            "path": path,
+            "url": signed_upload_url(path),
+            "type": "image" if is_image else "file",
+            "mime_type": mimetype or file.mimetype,
         }
     ), 201
 
 
 @app.get("/uploads/<path:filename>")
 def serve_upload(filename):
-    return send_from_directory(UPLOAD_DIR, filename)
+    normalized = filename.replace("\\", "/")
+    if not (upload_bearer_authorized() or valid_upload_signature(normalized)):
+        response = jsonify(
+            {
+                "error": "Unauthorized",
+                "message": "A valid upload signature is required.",
+            }
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response, 401
+    response = send_from_directory(UPLOAD_DIR, normalized)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    mimetype = (response.mimetype or mimetypes.guess_type(normalized)[0] or "").lower()
+    if not mimetype.startswith("image/"):
+        response.headers["Content-Disposition"] = f'attachment; filename="{Path(normalized).name}"'
+    return response
 
 
 @app.post("/api/chat")

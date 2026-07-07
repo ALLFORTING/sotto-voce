@@ -1,4 +1,4 @@
-const VERSION = "cheng-v156";
+const VERSION = "cheng-v157";
 const CACHE_PREFIX = "cheng-static-";
 const CACHE = `${CACHE_PREFIX}${VERSION}`;
 const STATIC = [
@@ -47,6 +47,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/api/") || event.request.method !== "GET") return;
+  if (url.pathname.startsWith("/uploads/")) return;
 
   const refresh = fetch(event.request).then((response) => {
     const copy = response.clone();

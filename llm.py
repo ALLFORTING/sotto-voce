@@ -2,7 +2,9 @@ import base64
 import copy
 import json
 import logging
+import queue
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = (BASE_DIR.parent / "frontend" / "uploads").resolve()
 MAX_IMAGE_ATTACHMENTS = 4
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+VISION_IMAGE_HISTORY_LIMIT = 6
 CACHE_READ_PRICE_RATIO = 0.1
 
 
@@ -252,7 +255,12 @@ def image_attachment_payloads(attachments):
     return payloads
 
 
-def timestamped(message):
+def attachment_label(attachment):
+    path = str(attachment.get("path") or "")
+    return str(attachment.get("name") or Path(path).name or "附件")
+
+
+def timestamped(message, include_image_placeholders=True):
     attachments = message_attachments(message)
     created_at = message["created_at"]
     try:
@@ -260,19 +268,28 @@ def timestamped(message):
     except (TypeError, IndexError):
         display = created_at
     content = f"[{display}]\n{message['content']}"
-    text_attachments = [item for item in attachments if item.get("type") != "image"]
+    placeholders = []
+    text_attachments = []
+    for item in attachments:
+        if item.get("type") == "image" or str(item.get("mime_type") or "").startswith("image/"):
+            if include_image_placeholders:
+                placeholders.append(f"[图片: {attachment_label(item)}]")
+        else:
+            text_attachments.append(item)
+    if placeholders:
+        content += "\n" + "\n".join(placeholders)
     if text_attachments:
         content += f"\n[attachments] {json.dumps(text_attachments, ensure_ascii=False)}"
     return content
 
 
-def anthropic_content(message):
+def anthropic_content(message, include_images=True):
     attachments = message_attachments(message)
-    images = image_attachment_payloads(attachments)
+    images = image_attachment_payloads(attachments) if include_images else []
     if not images:
-        return timestamped(message)
+        return timestamped(message, include_image_placeholders=True)
     return [
-        {"type": "text", "text": timestamped(message)},
+        {"type": "text", "text": timestamped(message, include_image_placeholders=False)},
         *(
             {
                 "type": "image",
@@ -287,13 +304,13 @@ def anthropic_content(message):
     ]
 
 
-def openai_content(message):
+def openai_content(message, include_images=True):
     attachments = message_attachments(message)
-    images = image_attachment_payloads(attachments)
+    images = image_attachment_payloads(attachments) if include_images else []
     if not images:
-        return timestamped(message)
+        return timestamped(message, include_image_placeholders=True)
     return [
-        {"type": "text", "text": timestamped(message)},
+        {"type": "text", "text": timestamped(message, include_image_placeholders=False)},
         *(
             {
                 "type": "image_url",
@@ -736,9 +753,13 @@ def auth_headers(preset):
 
 
 def anthropic_messages(history):
+    image_start = max(0, len(history) - VISION_IMAGE_HISTORY_LIMIT)
     return [
-        {"role": item["role"], "content": anthropic_content(item)}
-        for item in history
+        {
+            "role": item["role"],
+            "content": anthropic_content(item, include_images=index >= image_start),
+        }
+        for index, item in enumerate(history)
     ]
 
 
@@ -746,9 +767,13 @@ def openai_messages(system, history):
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
+    image_start = max(0, len(history) - VISION_IMAGE_HISTORY_LIMIT)
     messages.extend(
-        {"role": item["role"], "content": openai_content(item)}
-        for item in history
+        {
+            "role": item["role"],
+            "content": openai_content(item, include_images=index >= image_start),
+        }
+        for index, item in enumerate(history)
     )
     return messages
 
@@ -881,7 +906,6 @@ def stream_anthropic(response):
         if event_type == "message_start":
             usage = data.get("message", {}).get("usage", {})
             if usage:
-                LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
                 apply_usage_cost(result, usage)
             result.input_tokens = int_value(usage.get("input_tokens"))
             result.cache_read_tokens = int_value(usage.get("cache_read_input_tokens"))
@@ -940,7 +964,6 @@ def stream_anthropic(response):
         elif event_type == "message_delta":
             usage = data.get("usage", {}) or {}
             if usage:
-                LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
                 apply_usage_cost(result, usage)
             result.output_tokens = int_value(
                 usage.get("output_tokens", result.output_tokens)
@@ -965,7 +988,6 @@ def stream_openai(response):
             )
         usage = data.get("usage") or {}
         if usage:
-            LOGGER.info("RAW_USAGE_DEBUG: %s", json.dumps(usage, ensure_ascii=False, default=str))
             apply_usage_cost(result, usage)
         result.input_tokens = int_value(usage.get("prompt_tokens", result.input_tokens))
         result.output_tokens = int_value(usage.get("completion_tokens", result.output_tokens))
@@ -1105,16 +1127,18 @@ def tool_followup(format_name, result, tool_results):
     return messages
 
 
-def chat_events(context):
+def _run_chat_stream(context, emit):
     preset = context["preset"]
     format_name = upstream_format(preset)
     tools = get_tools()
     extra_messages = []
     final_result = StreamResult()
     started_at = time.monotonic()
+    completed_at = None
+    message_id = None
     try:
         if context.get("user_message_id"):
-            yield sse("user_saved", {"message_id": context["user_message_id"]})
+            emit("user_saved", {"message_id": context["user_message_id"]})
         with httpx.Client(timeout=httpx.Timeout(120.0, connect=20.0)) as client:
             for round_number in range(MAX_TOOL_ROUNDS + 1):
                 url, body = request_payload(context, tools, extra_messages)
@@ -1133,7 +1157,7 @@ def chat_events(context):
                     )
                     current = StreamResult()
                     for event, data, current in parser(response):
-                        yield sse(event, data)
+                        emit(event, data)
                 final_result.text += current.text
                 final_result.thinking += current.thinking
                 final_result.input_tokens += current.input_tokens
@@ -1152,80 +1176,137 @@ def chat_events(context):
                 for call in current.tool_calls:
                     try:
                         value = call_tool(call["name"], call["input"])
-                        yield sse("tool_result", {"name": call["name"], "ok": True})
+                        emit("tool_result", {"name": call["name"], "ok": True})
                     except Exception as error:
                         value = {"error": str(error)}
-                        yield sse("tool_result", {"name": call["name"], "ok": False})
+                        emit("tool_result", {"name": call["name"], "ok": False})
                     tool_results.append((call, value))
                 extra_messages.extend(
                     tool_followup(format_name, current, tool_results)
                 )
-
-        if not final_result.text.strip():
-            raise RuntimeError("The upstream completed without assistant text.")
-        completed_at = now_iso()
-        thinking_seconds = round(time.monotonic() - started_at, 2)
-        with connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO messages(
-                    conversation_id, role, content, thinking,
-                    thinking_seconds, created_at
-                ) VALUES (?, 'assistant', ?, ?, ?, ?)
-                """,
-                (
-                    context["conversation_id"],
-                    final_result.text,
-                    final_result.thinking or None,
-                    thinking_seconds if final_result.thinking else None,
-                    completed_at,
-                ),
-            )
-            conn.execute(
-                "UPDATE conversations SET updated_at = ? WHERE id = ?",
-                (completed_at, context["conversation_id"]),
-            )
-            message_id = cursor.lastrowid
-        window = context_window(preset["model"])
-        cost_breakdown = usage_cost_breakdown(preset, final_result)
-        yield sse(
-            "done",
-            {
-                "message_id": message_id,
-                "usage": {
-                    "input_tokens": final_result.input_tokens,
-                    "output_tokens": final_result.output_tokens,
-                    "fresh_input_tokens": cost_breakdown["fresh_input_tokens"],
-                    "cache_read_tokens": final_result.cache_read_tokens,
-                    "cache_write_tokens": final_result.cache_write_tokens,
-                    "input_price": cost_breakdown["input_price"],
-                    "cache_read_price": cost_breakdown["cache_read_price"],
-                    "output_price": cost_breakdown["output_price"],
-                    "estimated_cost": cost_breakdown["estimated_cost"],
-                    "upstream_cost": cost_breakdown["upstream_cost"],
-                    "cost_source": cost_breakdown["cost_source"],
-                    "cost": cost_breakdown["cost"],
-                    "context_pct": round(final_result.input_tokens / window, 6),
-                },
-            },
-        )
-        try:
-            record_usage_log(context, final_result, completed_at)
-        except Exception:
-            LOGGER.exception("Usage log insertion failed")
-        try:
-            title = generate_conversation_title(context, final_result.text)
-            if title:
-                with connection() as conn:
-                    conn.execute(
-                        "UPDATE conversations SET title = ? WHERE id = ?",
-                        (title, context["conversation_id"]),
-                    )
-        except Exception:
-            LOGGER.exception("Conversation title generation failed")
     except Exception as error:
         LOGGER.exception("Chat request failed")
-        yield sse("error", {"message": str(error)})
+        if final_result.text.strip():
+            LOGGER.warning("Saving partial assistant response after upstream failure")
+        else:
+            emit("error", {"message": str(error)})
+            return
+
+    if not final_result.text.strip():
+        emit("error", {"message": "The upstream completed without assistant text."})
+        return
+
+    completed_at = now_iso()
+    thinking_seconds = round(time.monotonic() - started_at, 2)
+    with connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO messages(
+                conversation_id, role, content, thinking,
+                thinking_seconds, created_at
+            ) VALUES (?, 'assistant', ?, ?, ?, ?)
+            """,
+            (
+                context["conversation_id"],
+                final_result.text,
+                final_result.thinking or None,
+                thinking_seconds if final_result.thinking else None,
+                completed_at,
+            ),
+        )
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (completed_at, context["conversation_id"]),
+        )
+        message_id = cursor.lastrowid
+    window = context_window(preset["model"])
+    cost_breakdown = usage_cost_breakdown(preset, final_result)
+    emit(
+        "done",
+        {
+            "message_id": message_id,
+            "usage": {
+                "input_tokens": final_result.input_tokens,
+                "output_tokens": final_result.output_tokens,
+                "fresh_input_tokens": cost_breakdown["fresh_input_tokens"],
+                "cache_read_tokens": final_result.cache_read_tokens,
+                "cache_write_tokens": final_result.cache_write_tokens,
+                "input_price": cost_breakdown["input_price"],
+                "cache_read_price": cost_breakdown["cache_read_price"],
+                "output_price": cost_breakdown["output_price"],
+                "estimated_cost": cost_breakdown["estimated_cost"],
+                "upstream_cost": cost_breakdown["upstream_cost"],
+                "cost_source": cost_breakdown["cost_source"],
+                "cost": cost_breakdown["cost"],
+                "context_pct": round(final_result.input_tokens / window, 6),
+            },
+        },
+    )
+    try:
+        record_usage_log(context, final_result, completed_at)
+    except Exception:
+        LOGGER.exception("Usage log insertion failed")
+    try:
+        title = generate_conversation_title(context, final_result.text)
+        if title:
+            with connection() as conn:
+                conn.execute(
+                    "UPDATE conversations SET title = ? WHERE id = ?",
+                    (title, context["conversation_id"]),
+                )
+    except Exception:
+        LOGGER.exception("Conversation title generation failed")
+
+
+def chat_events(context):
+    events = queue.Queue(maxsize=200)
+    sentinel = object()
+    client_open = threading.Event()
+    client_open.set()
+
+    def emit(event, data):
+        if not client_open.is_set():
+            return
+        payload = sse(event, data)
+        while client_open.is_set():
+            try:
+                events.put(payload, timeout=0.25)
+                return
+            except queue.Full:
+                continue
+
+    def worker():
+        try:
+            _run_chat_stream(context, emit)
+        except Exception as error:
+            LOGGER.exception("Chat worker crashed")
+            emit("error", {"message": str(error)})
+        finally:
+            if client_open.is_set():
+                try:
+                    events.put(sentinel, timeout=0.25)
+                except queue.Full:
+                    pass
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    try:
+        while True:
+            try:
+                item = events.get(timeout=15)
+            except queue.Empty:
+                if not thread.is_alive():
+                    break
+                yield ": ping\n\n"
+                continue
+            if item is sentinel:
+                break
+            yield item
+    except GeneratorExit:
+        client_open.clear()
+        raise
+    finally:
+        client_open.clear()
 
 
 def phase_status():
