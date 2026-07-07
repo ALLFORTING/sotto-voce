@@ -335,8 +335,8 @@ svg {
 .search-bar.wide {
   height: auto;
   min-height: 29px;
-  width: calc(100% - 104px);
-  max-width: 320px;
+  width: auto;
+  max-width: none;
   margin: 6px 24px 14px;
   padding: 5px 12px;
   border: 1px solid var(--border-soft);
