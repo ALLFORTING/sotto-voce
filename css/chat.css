@@ -448,19 +448,12 @@
   display: grid;
   place-items: center;
   border-radius: 19px;
+  background: var(--chat-icon-bg, var(--bg-elev));
   color: var(--text-2);
   font-size: 21px;
 }
 
-.plus {
-  background: var(--chat-icon-bg, var(--bg-elev));
-}
-
 .plus.open {
-  color: var(--accent);
-}
-
-.send {
   color: var(--accent);
 }
 
