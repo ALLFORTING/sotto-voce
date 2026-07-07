@@ -245,6 +245,15 @@
   margin-top: 6px;
 }
 
+.msg-attachments + .bubble-time {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 6px;
+}
+
 .read-checks {
   display: inline-flex;
   color: currentColor;
