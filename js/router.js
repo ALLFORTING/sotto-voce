@@ -722,11 +722,14 @@ async function sendMessage(content, attachments = [], options = {}) {
   };
   const drain = () => {
     pending.frame = 0;
+    let wroteText = false;
+    let wroteThinking = false;
     if (pending.thinking) {
       const take = Math.max(1, Math.ceil(pending.thinking.length / 90));
       assistant.thinking += pending.thinking.slice(0, take);
       pending.thinking = pending.thinking.slice(take);
       updateStreamMeta(assistant);
+      wroteThinking = true;
     }
     const canRenderText = !pending.sawThinking || (pending.thinkingEnded && !pending.thinking);
     if (pending.text && canRenderText) {
@@ -739,8 +742,9 @@ async function sendMessage(content, attachments = [], options = {}) {
       }
       assistant.content += text;
       appendStreamText(assistant, text);
+      wroteText = Boolean(text);
     }
-    scrollChat();
+    if (wroteText || (!wroteThinking && !pending.sawThinking)) scrollChat();
     if (pending.thinking || (pending.text && canRenderText)) pending.frame = requestAnimationFrame(drain);
     else finalize().catch(console.warn);
   };
@@ -896,6 +900,15 @@ function showJournalInputDialog(type) {
       </div>
     </section>`);
   requestAnimationFrame(() => document.querySelector("#journal-quick-input")?.focus());
+}
+
+function renderCalendarPreserveScroll() {
+  const scrollTop = document.querySelector(".jnl-scroll")?.scrollTop || 0;
+  render(renderCalendar());
+  requestAnimationFrame(() => {
+    const scroll = document.querySelector(".jnl-scroll");
+    if (scroll) scroll.scrollTop = scrollTop;
+  });
 }
 
 document.addEventListener("pointerdown", (event) => {
@@ -1176,7 +1189,7 @@ document.addEventListener("click", async (event) => {
         quickDialogSubmitting = false;
         const overlay = document.querySelector(".phone-overlay-layer");
         if (overlay) overlay.innerHTML = "";
-        render(renderCalendar());
+        renderCalendarPreserveScroll();
       } catch (error) {
         quickDialogSubmitting = false;
         actionEl.disabled = false;
@@ -1199,7 +1212,7 @@ document.addEventListener("click", async (event) => {
         quickDialogSubmitting = false;
         const overlay = document.querySelector(".phone-overlay-layer");
         if (overlay) overlay.innerHTML = "";
-        render(renderCalendar());
+        renderCalendarPreserveScroll();
       } catch (error) {
         quickDialogSubmitting = false;
         actionEl.disabled = false;
