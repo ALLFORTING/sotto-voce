@@ -455,6 +455,11 @@ export function updateStreamMeta(message, final = false) {
 
 let autoFollow = true;
 let scrollFrame = 0;
+const AUTO_FOLLOW_PX = 96;
+
+function nearChatBottom(node) {
+  return node.scrollHeight - node.scrollTop - node.clientHeight <= AUTO_FOLLOW_PX;
+}
 
 export function scrollChat(force = false) {
   if (force) autoFollow = true;
@@ -463,12 +468,16 @@ export function scrollChat(force = false) {
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0;
     const node = document.querySelector("#chat-stream");
-    if (node) node.scrollTop = node.scrollHeight;
+    if (!node) return;
+    if (!force && !nearChatBottom(node)) {
+      autoFollow = false;
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
   });
 }
 
 export function updateAutoFollow(event) {
   if (event.target?.id !== "chat-stream") return;
-  const node = event.target;
-  autoFollow = node.scrollHeight - node.scrollTop - node.clientHeight <= 56;
+  autoFollow = nearChatBottom(event.target);
 }

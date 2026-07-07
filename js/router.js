@@ -1633,7 +1633,8 @@ document.addEventListener("click", async (event) => {
     await api.patch(`/api/todos/${todo}`, { done: !item?.done });
     await loadCalendar(true);
     await loadHome(true);
-    return render(renderCalendar());
+    renderCalendarPreserveScroll();
+    return;
   }
   const messageAction = event.target.closest("[data-message-action]")?.dataset.messageAction;
   if (messageAction) return handleMessageAction(messageAction);
