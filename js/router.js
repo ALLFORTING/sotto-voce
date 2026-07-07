@@ -50,7 +50,8 @@ import {
   renderApiSettings,
   renderMcpSettings,
   renderPrompt,
-  renderSettings
+  renderSettings,
+  renderTerminal
 } from "./settings.js";
 
 const app = document.querySelector("#app");
@@ -275,6 +276,10 @@ async function loadSettings(force = false) {
   store.cacheAt.settings = Date.now();
 }
 
+async function loadTerminalHistory() {
+  store.terminalHistory = await api.get("/api/terminal/history");
+}
+
 function rememberPresetDraft(form) {
   const data = formValue(form);
   if (!String(data.api_key || "").trim()) delete data.api_key;
@@ -334,6 +339,10 @@ async function prepare(path) {
   else if (path === "/journal/ledger") await loadUsage();
   else if (path === "/memory") await loadMemory("bucket");
   else if (path === "/memory/archive") await loadMemory("archive");
+  else if (path === "/settings/terminal") {
+    await loadSettings();
+    await loadTerminalHistory();
+  }
   else if (path.startsWith("/settings")) await loadSettings();
 }
 
@@ -352,6 +361,7 @@ function renderRoute(path) {
   if (path === "/settings/api") return renderApiSettings();
   if (path === "/settings/mcp") return renderMcpSettings();
   if (path === "/settings/anniv") return renderAnniversaries();
+  if (path === "/settings/terminal") return renderTerminal();
   if (path === "/chat/search") return renderSearchPage();
   return renderHome();
 }
@@ -1443,6 +1453,15 @@ document.addEventListener("click", async (event) => {
       const overlay = document.querySelector(".phone-overlay-layer");
       if (overlay) overlay.innerHTML = "";
       return render(renderApiSettings());
+    }
+    if (action === "exec-command") {
+      const input = document.querySelector("#term-cmd-input");
+      const command = String(input?.value || "").trim();
+      if (!command) return;
+      const result = await api.post("/api/terminal/exec", { command });
+      store.terminalHistory.unshift(result);
+      store.terminalHistory = store.terminalHistory.slice(0, 50);
+      return render(renderTerminal());
     }
     if (action === "show-export-confirm") {
       const overlay = document.querySelector(".phone-overlay-layer");

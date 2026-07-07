@@ -1,4 +1,4 @@
-export const VERSION = "cheng-v158";
+export const VERSION = "cheng-v159";
 
 const readJson = (key, fallback) => {
   try {
@@ -65,6 +65,7 @@ export const store = {
   presets: [],
   mcpServers: [],
   anniversaries: [],
+  terminalHistory: [],
   cacheAt: {
     home: Number(localStorage.getItem("cheng_home_v3_at") || 0),
     conversations: Number(localStorage.getItem("cheng_conversations_v2_at") || 0),
