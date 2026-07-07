@@ -101,7 +101,7 @@ export function renderCalendar() {
         ${["一", "二", "三", "四", "五", "六", "日"].map((d) => `<div class="wd">${d}</div>`).join("")}
         ${calendarCells(store.calendarMonth, data)}
       </div>
-      <div class="day-detail-head"><span>${esc(dateLabel(selectedDate))}</span><span>${isToday ? "今天" : selectedDate}</span></div>
+      <div class="day-detail-head"><span>${esc(dateLabel(selectedDate))}</span></div>
       <button class="checkin" ${isToday ? 'data-action="checkin"' : ""}>
         <span class="ring">${icon("check")}</span>
         <span class="info"><span class="t">${checkinTitle}</span><span class="s">${esc(checkinSubtitle)}</span></span>
