@@ -1630,10 +1630,27 @@ document.addEventListener("click", async (event) => {
   const todo = event.target.closest("[data-todo]")?.dataset.todo;
   if (todo) {
     const item = store.calendar?.todos?.find((entry) => entry.id === Number(todo));
-    await api.patch(`/api/todos/${todo}`, { done: !item?.done });
-    await loadCalendar(true);
-    await loadHome(true);
+    if (!item) return;
+    const previousDone = item.done;
+    const nextDone = !Boolean(previousDone);
+    item.done = nextDone;
     renderCalendarPreserveScroll();
+    try {
+      await api.patch(`/api/todos/${todo}`, { done: nextDone });
+    } catch (err) {
+      item.done = previousDone;
+      renderCalendarPreserveScroll();
+      toast(err.message);
+      return;
+    }
+    try {
+      await loadCalendar(true);
+      await loadHome(true);
+      renderCalendarPreserveScroll();
+    } catch (err) {
+      renderCalendarPreserveScroll();
+      toast(err.message);
+    }
     return;
   }
   const messageAction = event.target.closest("[data-message-action]")?.dataset.messageAction;

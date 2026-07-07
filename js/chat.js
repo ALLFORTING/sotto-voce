@@ -455,21 +455,33 @@ export function updateStreamMeta(message, final = false) {
 
 let autoFollow = true;
 let scrollFrame = 0;
+let userTouchingChat = false;
 const AUTO_FOLLOW_PX = 96;
 
 function nearChatBottom(node) {
   return node.scrollHeight - node.scrollTop - node.clientHeight <= AUTO_FOLLOW_PX;
 }
 
+function chatStreamFromEvent(event) {
+  return event.target?.closest?.("#chat-stream");
+}
+
+function finishChatTouch() {
+  const node = document.querySelector("#chat-stream");
+  userTouchingChat = false;
+  if (node) autoFollow = nearChatBottom(node);
+}
+
 export function scrollChat(force = false) {
   if (force) autoFollow = true;
+  if (!force && userTouchingChat) return;
   if (!force && !autoFollow) return;
   if (scrollFrame) return;
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0;
     const node = document.querySelector("#chat-stream");
     if (!node) return;
-    if (!force && !nearChatBottom(node)) {
+    if (!force && (userTouchingChat || !nearChatBottom(node))) {
       autoFollow = false;
       return;
     }
@@ -479,5 +491,18 @@ export function scrollChat(force = false) {
 
 export function updateAutoFollow(event) {
   if (event.target?.id !== "chat-stream") return;
+  if (userTouchingChat) {
+    autoFollow = false;
+    return;
+  }
   autoFollow = nearChatBottom(event.target);
 }
+
+document.addEventListener("touchstart", (event) => {
+  if (!chatStreamFromEvent(event)) return;
+  userTouchingChat = true;
+  autoFollow = false;
+}, { passive: true });
+
+document.addEventListener("touchend", finishChatTouch, { passive: true });
+document.addEventListener("touchcancel", finishChatTouch, { passive: true });
