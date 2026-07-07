@@ -183,11 +183,11 @@
 }
 
 .msg-bubble.has-time {
-  padding-bottom: 6px;
+  padding-bottom: 7px;
 }
 
 .btext {
-  display: block;
+  display: inline;
   font-size: 12.5px;
 }
 
@@ -196,17 +196,22 @@
 }
 
 .tspace {
-  display: none;
+  display: inline-block;
+  width: 34px;
+  height: 1px;
+}
+
+.tspace.user {
+  width: 54px;
 }
 
 .bubble-time {
-  position: static;
-  display: flex;
+  position: absolute;
+  right: 8px;
+  bottom: 4px;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 2px;
-  width: 100%;
-  margin-top: 4px;
   color: var(--text-3);
   font-size: 9.5px;
   line-height: 12px;
@@ -217,6 +222,27 @@
 
 .msg-row.user .bubble-time {
   color: var(--bubble-user-time, rgb(255 255 255 / 0.78));
+}
+
+.msg-bubble.has-attachments {
+  padding-bottom: 6px;
+}
+
+.msg-bubble.has-attachments .btext {
+  display: block;
+}
+
+.msg-bubble.has-attachments .tspace {
+  display: none;
+}
+
+.msg-bubble.has-attachments .bubble-time {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 6px;
 }
 
 .read-checks {
@@ -262,10 +288,6 @@
   flex-direction: column;
   gap: 8px;
   width: 100%;
-}
-
-.msg-attachments + .bubble-time {
-  margin-top: 6px;
 }
 
 .msg-attachment {

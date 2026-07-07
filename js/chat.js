@@ -28,7 +28,8 @@ function bubbleContentHtml(text, role) {
 }
 
 function messageBubbleHtml({ role, text, message, tail = true, read = false, attachments = "" }) {
-  return `<div class="msg-bubble ${tail ? "tail" : ""} ${message.created_at ? "has-time" : ""}">
+  const hasAttachments = Boolean(String(attachments || "").trim());
+  return `<div class="msg-bubble ${tail ? "tail" : ""} ${message.created_at ? "has-time" : ""} ${hasAttachments ? "has-attachments" : ""}">
     ${bubbleContentHtml(text, role)}
     ${attachments}
     ${bubbleMetaHtml(message, role, read)}
