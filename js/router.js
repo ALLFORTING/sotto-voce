@@ -619,6 +619,15 @@ function schedulePendingMessageJump(attempt = 0) {
   }, 1800);
 }
 
+function renderChatPreserveScroll() {
+  const scrollTop = document.querySelector("#chat-stream")?.scrollTop || 0;
+  render(renderChat());
+  requestAnimationFrame(() => {
+    const stream = document.querySelector("#chat-stream");
+    if (stream) stream.scrollTop = scrollTop;
+  });
+}
+
 async function scrollToMessage(conversationId, messageId) {
   store.pendingJumpMessageId = Number(messageId);
   rememberConversation(Number(conversationId));
@@ -694,8 +703,12 @@ async function sendMessage(content, attachments = [], options = {}) {
     store.messages.push(userMessage, assistant);
   }
   cacheMessages(store.conversationId, store.messages);
-  render(renderChat());
-  scrollChat(true);
+  if (editing) {
+    renderChatPreserveScroll();
+  } else {
+    render(renderChat());
+    scrollChat(true);
+  }
 
   const pending = {
     text: "",
@@ -834,6 +847,40 @@ function unlockChatStreamForLongPress() {
   longPressScrollTop = null;
 }
 
+function longPressSafeRect(layerRect) {
+  const chatTop = document.querySelector(".chat-top")?.getBoundingClientRect();
+  const composer = document.querySelector(".composer")?.getBoundingClientRect();
+  const tabbar = document.querySelector(".tabbar")?.getBoundingClientRect();
+  const top = Math.max(8, (chatTop?.bottom ?? layerRect.top + 8) - layerRect.top + 4);
+  const bottomCandidates = [composer?.top, tabbar?.top]
+    .filter((value) => Number.isFinite(value))
+    .map((value) => value - layerRect.top - 8);
+  const bottom = Math.max(top + 80, Math.min(...bottomCandidates, layerRect.height - 8));
+  return { top, bottom, height: Math.max(80, bottom - top) };
+}
+
+function constrainedLongPressRect(rect, layerRect) {
+  const safe = longPressSafeRect(layerRect);
+  const source = {
+    left: rect.left - layerRect.left,
+    top: rect.top - layerRect.top,
+    width: rect.width,
+    height: rect.height
+  };
+  const height = Math.min(source.height, safe.height);
+  const top = Math.max(safe.top, Math.min(source.top, safe.bottom - height));
+  const clipped = source.height > height + 1;
+  return {
+    left: source.left,
+    top,
+    bottom: top + height,
+    width: source.width,
+    height,
+    maxHeight: height,
+    clipped
+  };
+}
+
 function clearLongPressActive() {
   clearTimeout(longPressCleanupTimer);
   longPressCleanupTimer = 0;
@@ -864,10 +911,11 @@ function dismissLongPress(options = {}) {
     return;
   }
   nodes.forEach((node) => node.classList.add("long-press-exit"));
+  clearLongPressActive();
   clearTimeout(longPressCleanupTimer);
   longPressCleanupTimer = setTimeout(() => {
     nodes.forEach((node) => node.remove());
-    clearLongPressActive();
+    longPressCleanupTimer = 0;
   }, 190);
 }
 
@@ -975,6 +1023,7 @@ document.addEventListener("pointerdown", (event) => {
       clone.querySelectorAll(".long-press-active, .long-press-source-hidden, .jump-highlight").forEach((node) => {
         node.classList.remove("long-press-active", "long-press-source-hidden", "jump-highlight");
       });
+      const displayRect = constrainedLongPressRect(rect, layerRect);
       store.longPress = {
         id: target?.id || id || null,
         index,
@@ -988,13 +1037,10 @@ document.addEventListener("pointerdown", (event) => {
           width: rect.width,
           height: rect.height
         },
-        floatRect: {
-          left: rect.left - layerRect.left,
-          top: rect.top - layerRect.top,
-          width: rect.width,
-          height: rect.height
-        },
+        floatRect: displayRect,
+        displayRect,
         floatHtml: clone.outerHTML,
+        floatClipped: displayRect.clipped,
         viewport: { width: layerRect.width, height: layerRect.height }
       };
       lockChatStreamForLongPress();
@@ -1203,7 +1249,8 @@ document.addEventListener("click", async (event) => {
     if (action === "cancel-inline-edit") {
       store.editingMessageId = null;
       store.editingMessageDraft = "";
-      return render(renderChat());
+      renderChatPreserveScroll();
+      return;
     }
     if (action === "send-inline-edit") {
       const messageId = Number(actionEl.dataset.messageId || 0);
@@ -1218,7 +1265,7 @@ document.addEventListener("click", async (event) => {
       store.editingMessageId = null;
       store.editingMessageDraft = "";
       cacheMessages(store.conversationId, store.messages);
-      render(renderChat());
+      renderChatPreserveScroll();
       await sendMessage(content, [], { editMessageId: target.id, index: index + 1 });
       return;
     }
@@ -1889,9 +1936,8 @@ async function handleMessageAction(action) {
   if (action === "edit") {
     store.editingMessageId = target.id;
     store.editingMessageDraft = target.content || "";
-    store.longPress = null;
-    dismissLongPress();
-    render(renderChat());
+    dismissLongPress({ animate: false });
+    renderChatPreserveScroll();
     requestAnimationFrame(() => {
       const input = document.querySelector(`[data-inline-edit="${target.id}"]`);
       if (input) {

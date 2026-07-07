@@ -320,7 +320,7 @@ export function renderLongPressMenu() {
         <button class="opt danger" data-book-action="delete"><span>删除</span>${icon("trash")}</button>
       </section>`;
   }
-  const rect = store.longPress.rect || { left: 28, top: 260, bottom: 320, width: 220 };
+  const rect = store.longPress.displayRect || store.longPress.rect || { left: 28, top: 260, bottom: 320, width: 220 };
   const viewport = store.longPress.viewport || { width: 393, height: 750 };
   const left = store.longPress.role === "assistant"
     ? Math.max(18, Math.min(viewport.width - 202, rect.left))
@@ -334,7 +334,7 @@ export function renderLongPressMenu() {
     : Math.max(margin, rect.top - menuHeight - margin);
   const ai = store.longPress.role === "assistant";
   const float = store.longPress.floatHtml && store.longPress.floatRect
-    ? `<div class="long-press-float ${esc(store.longPress.role || "")}" style="left:${store.longPress.floatRect.left}px;top:${store.longPress.floatRect.top}px;width:${store.longPress.floatRect.width}px">${store.longPress.floatHtml}</div>`
+    ? `<div class="long-press-float ${store.longPress.floatClipped ? "clipped" : ""} ${esc(store.longPress.role || "")}" style="left:${store.longPress.floatRect.left}px;top:${store.longPress.floatRect.top}px;width:${store.longPress.floatRect.width}px;max-height:${store.longPress.floatRect.maxHeight || store.longPress.floatRect.height}px">${store.longPress.floatHtml}</div>`
     : "";
   return `<div class="overlay-scrim chat-only long-press-scrim" data-action="close-overlay"></div>
     ${float}
