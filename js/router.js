@@ -63,6 +63,7 @@ let suppressBookCardClick = false;
 let jumpClearTimer = 0;
 let quickDialogSubmitting = false;
 const SEARCH_CALENDAR_START = "2026-01";
+const uploadSignatureRefreshTried = new Set();
 
 const CACHE_MS = {
   home: 5 * 60_000,
@@ -133,12 +134,13 @@ async function loadMessages(force = false) {
 }
 
 window.__refreshUploadSignatures = async (img) => {
-  if (!img || img.dataset.signatureRetry) return;
-  img.dataset.signatureRetry = "1";
-  if (!store.conversationId) return;
+  if (!img || !store.conversationId) return;
+  const conversationId = Number(store.conversationId);
+  if (uploadSignatureRefreshTried.has(conversationId)) return;
+  uploadSignatureRefreshTried.add(conversationId);
   try {
     await loadMessages(true);
-    if (route() === "/chat") render(renderChat());
+    if (route() === "/chat" && Number(store.conversationId) === conversationId) render(renderChat());
   } catch (error) {
     console.warn("upload signature refresh failed", error);
   }
