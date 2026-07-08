@@ -1,6 +1,7 @@
-const VERSION = "cheng-v161";
+const VERSION = "cheng-v162";
 const CACHE_PREFIX = "cheng-static-";
 const CACHE = `${CACHE_PREFIX}${VERSION}`;
+const CODE_ASSET_RE = /\.(?:js|css|html|json)$/;
 const STATIC = [
   "/",
   "/index.html",
@@ -49,11 +50,23 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/") || event.request.method !== "GET") return;
   if (url.pathname.startsWith("/uploads/")) return;
 
-  const refresh = fetch(event.request).then((response) => {
+  const isCodeAsset = url.pathname === "/" ||
+    url.pathname === "/index.html" ||
+    url.pathname === "/manifest.json" ||
+    CODE_ASSET_RE.test(url.pathname);
+
+  const refresh = fetch(
+    isCodeAsset ? new Request(event.request, { cache: "no-cache" }) : event.request
+  ).then((response) => {
     const copy = response.clone();
     caches.open(CACHE).then((cache) => cache.put(event.request, copy));
     return response;
   });
+
+  if (isCodeAsset) {
+    event.respondWith(refresh.catch(() => caches.match(event.request)));
+    return;
+  }
 
   event.waitUntil(refresh.catch(() => undefined));
   event.respondWith(caches.match(event.request).then((cached) => cached || refresh));
