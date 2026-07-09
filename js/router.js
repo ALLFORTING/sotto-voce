@@ -638,12 +638,19 @@ function schedulePendingMessageJump(attempt = 0) {
   }, 1800);
 }
 
-function renderChatPreserveScroll() {
-  const scrollTop = document.querySelector("#chat-stream")?.scrollTop || 0;
+function currentChatScrollTop() {
+  return document.querySelector("#chat-stream")?.scrollTop || 0;
+}
+
+function renderChatPreserveScroll(scrollTop = currentChatScrollTop()) {
   render(renderChat());
-  requestAnimationFrame(() => {
+  const restore = () => {
     const stream = document.querySelector("#chat-stream");
     if (stream) stream.scrollTop = scrollTop;
+  };
+  requestAnimationFrame(() => {
+    restore();
+    requestAnimationFrame(restore);
   });
 }
 
@@ -723,7 +730,7 @@ async function sendMessage(content, attachments = [], options = {}) {
   }
   cacheMessages(store.conversationId, store.messages);
   if (editing) {
-    renderChatPreserveScroll();
+    renderChatPreserveScroll(options.scrollTop);
   } else {
     render(renderChat());
     scrollChat(true);
@@ -1272,6 +1279,7 @@ document.addEventListener("click", async (event) => {
       return;
     }
     if (action === "send-inline-edit") {
+      const scrollTop = currentChatScrollTop();
       const messageId = Number(actionEl.dataset.messageId || 0);
       const target = store.messages.find((item) => Number(item.id) === messageId);
       const input = document.querySelector(`[data-inline-edit="${messageId}"]`);
@@ -1284,8 +1292,7 @@ document.addEventListener("click", async (event) => {
       store.editingMessageId = null;
       store.editingMessageDraft = "";
       cacheMessages(store.conversationId, store.messages);
-      renderChatPreserveScroll();
-      await sendMessage(content, [], { editMessageId: target.id, index: index + 1 });
+      await sendMessage(content, [], { editMessageId: target.id, index: index + 1, scrollTop });
       return;
     }
     if (action === "close-dialog") {
