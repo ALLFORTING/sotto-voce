@@ -118,12 +118,12 @@ function thoughtContentHtml(text, done = false) {
 function thoughtHtml(message) {
   const text = String(message.thinking || "").trim();
   if (!text && !message.thinkingStarted) return "";
-  const open = Boolean(message.thinkingOpen);
+  const open = !message.thinkingStarted && Boolean(message.thinkingOpen);
   const label = message.thinkingStarted
     ? "Thinking..."
     : `Thought for ${Number(message.thinking_seconds || 0).toFixed(1)}s`;
   return `<div class="thought thought-h">
-    <button data-action="toggle-thought" ${text ? "" : "disabled"}>
+    <button data-action="toggle-thought" ${text && !message.thinkingStarted ? "" : "disabled"}>
       <span class="chev">${icon(open ? "chevD" : "chevR")}</span>
       <span>${label}</span>
     </button>
